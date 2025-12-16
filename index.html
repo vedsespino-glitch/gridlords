@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GridLords - Real-Time Strategy</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <div id="header">
+            <h1>GridLords</h1>
+            <div id="status">Connecting...</div>
+            <div id="player-info"></div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="instructions">
+            <p><strong>How to Play:</strong></p>
+            <p>Click on your cell, then click an adjacent cell to move troops.</p>
+            <p>Capture the enemy General to win!</p>
+        </div>
+        <button id="resetBtn" style="display: none;">New Game</button>
+    </div>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>

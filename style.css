@@ -1,0 +1,124 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #fff;
+}
+
+#game-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+}
+
+#header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+#header h1 {
+    font-size: 2.5rem;
+    color: #e94560;
+    text-shadow: 0 0 10px rgba(233, 69, 96, 0.5);
+    margin-bottom: 10px;
+}
+
+#status {
+    font-size: 1.2rem;
+    color: #0f3460;
+    background: #e94560;
+    padding: 8px 20px;
+    border-radius: 20px;
+    margin-bottom: 10px;
+}
+
+#player-info {
+    font-size: 1.1rem;
+    padding: 5px 15px;
+}
+
+#player-info.red {
+    color: #ff6b6b;
+}
+
+#player-info.blue {
+    color: #4dabf7;
+}
+
+#gameCanvas {
+    border: 3px solid #e94560;
+    border-radius: 5px;
+    box-shadow: 0 0 30px rgba(233, 69, 96, 0.3);
+    cursor: pointer;
+}
+
+#instructions {
+    margin-top: 20px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 15px 25px;
+    border-radius: 10px;
+    max-width: 400px;
+}
+
+#instructions p {
+    margin: 5px 0;
+    font-size: 0.9rem;
+    color: #ccc;
+}
+
+#instructions strong {
+    color: #e94560;
+}
+
+#resetBtn {
+    margin-top: 20px;
+    padding: 12px 30px;
+    font-size: 1.1rem;
+    background: #e94560;
+    color: white;
+    border: none;
+    border-radius: 25px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+#resetBtn:hover {
+    background: #ff6b6b;
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+}
+
+.winner-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.winner-message {
+    font-size: 3rem;
+    text-align: center;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
