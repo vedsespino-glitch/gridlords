@@ -22,6 +22,8 @@ const GRID_SIZE = 20;
 const TICK_INTERVAL = 1000;
 const MOUNTAIN_DENSITY = 0.15;
 
+let gameLoopInterval = null;
+
 const TERRAIN = {
     EMPTY: 0,
     MOUNTAIN: 1,
@@ -96,13 +98,10 @@ function gameTick() {
         for (let x = 0; x < GRID_SIZE; x++) {
             const cell = gameState.grid[y][x];
             if (cell.terrain === TERRAIN.GENERAL && cell.owner) {
-                // Find the player with this color and check their class
                 const playerId = Object.keys(gameState.players).find(
                     id => gameState.players[id] === cell.owner
                 );
                 const playerClass = playerId ? gameState.playerClasses[playerId] : null;
-                
-                // Tank class produces 2 troops per second, others produce 1
                 const troopProduction = playerClass === 'tank' ? 2 : 1;
                 cell.troops += troopProduction;
             }
@@ -110,6 +109,57 @@ function gameTick() {
     }
 
     io.emit('gameState', getPublicGameState());
+}
+
+function startGameLoop() {
+    if (gameLoopInterval) {
+        console.log('Game loop already running, skipping start');
+        return;
+    }
+    console.log('--- GAME LOOP STARTED ---');
+    gameLoopInterval = setInterval(gameTick, TICK_INTERVAL);
+}
+
+function stopGameLoop() {
+    if (gameLoopInterval) {
+        clearInterval(gameLoopInterval);
+        gameLoopInterval = null;
+        console.log('--- GAME LOOP STOPPED ---');
+    }
+}
+
+function checkAndStartGame() {
+    const actualPlayerCount = Object.keys(gameState.players).length;
+    const allPlayersHaveClass = Object.keys(gameState.players).every(
+        id => gameState.playerClasses[id]
+    );
+    
+    console.log(`Checking game start: players=${actualPlayerCount}, allHaveClass=${allPlayersHaveClass}, gameStarted=${gameState.gameStarted}`);
+    
+    if (actualPlayerCount === 2 && allPlayersHaveClass && !gameState.gameStarted) {
+        gameState.gameStarted = true;
+        gameState.playerCount = 2;
+        io.emit('gameStart');
+        io.emit('gameState', getPublicGameState());
+        startGameLoop();
+        console.log('Game started with 2 players!');
+    }
+    
+    broadcastPlayerCount();
+}
+
+function broadcastPlayerCount() {
+    const count = Object.keys(gameState.players).length;
+    io.emit('playerCount', { current: count, required: 2 });
+}
+
+function resetGameForNewMatch() {
+    console.log('Resetting game for new match...');
+    stopGameLoop();
+    initializeGame();
+    io.emit('gameReset');
+    io.emit('gameState', getPublicGameState());
+    broadcastPlayerCount();
 }
 
 function getPublicGameState() {
@@ -177,11 +227,12 @@ function executeMove(playerId, from, to) {
 io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
 
-    // Get player class from connection query
     const playerClass = socket.handshake.query.playerClass || 'rusher';
     console.log(`Player ${socket.id} selected class: ${playerClass}`);
 
-    if (gameState.playerCount >= 2) {
+    const actualPlayerCount = Object.keys(gameState.players).length;
+    if (actualPlayerCount >= 2 || gameState.gameStarted) {
+        console.log(`Game full or in progress. Rejecting player ${socket.id}`);
         socket.emit('gameFull');
         socket.disconnect();
         return;
@@ -196,11 +247,9 @@ io.on('connection', (socket) => {
 
     gameState.players[socket.id] = playerColor;
     gameState.playerClasses[socket.id] = playerClass;
-    gameState.playerCount++;
+    gameState.playerCount = Object.keys(gameState.players).length;
 
-    // Apply Rusher bonus: Start with 30 troops instead of default
     if (playerClass === 'rusher') {
-        // Find the general cell for this player's color and set troops to 30
         for (let y = 0; y < GRID_SIZE; y++) {
             for (let x = 0; x < GRID_SIZE; x++) {
                 const cell = gameState.grid[y][x];
@@ -213,15 +262,10 @@ io.on('connection', (socket) => {
     }
 
     socket.emit('playerAssigned', { color: playerColor, playerClass: playerClass });
-    console.log(`Player ${socket.id} assigned color: ${playerColor}`);
-
-    if (gameState.playerCount === 2 && !gameState.gameStarted) {
-        gameState.gameStarted = true;
-        io.emit('gameStart');
-        console.log('Game started!');
-    }
+    console.log(`Player ${socket.id} assigned color: ${playerColor}, total players: ${gameState.playerCount}`);
 
     socket.emit('gameState', getPublicGameState());
+    checkAndStartGame();
 
     socket.on('move', (data) => {
         if (!gameState.gameStarted || gameState.winner) return;
@@ -237,34 +281,26 @@ io.on('connection', (socket) => {
         const disconnectedColor = gameState.players[socket.id];
         delete gameState.players[socket.id];
         delete gameState.playerClasses[socket.id];
-        gameState.playerCount--;
+        gameState.playerCount = Object.keys(gameState.players).length;
 
-        if (gameState.gameStarted && !gameState.winner && gameState.playerCount < 2) {
-            const remainingPlayer = Object.values(gameState.players)[0];
-            if (remainingPlayer) {
-                gameState.winner = remainingPlayer;
-                io.emit('gameOver', { winner: remainingPlayer, reason: 'disconnect' });
-            }
-        }
+        console.log(`Player count after disconnect: ${gameState.playerCount}, gameStarted: ${gameState.gameStarted}`);
 
-        if (gameState.playerCount === 0) {
-            console.log('All players disconnected. Resetting game...');
-            initializeGame();
+        if (gameState.gameStarted && gameState.playerCount < 2) {
+            console.log('Player disconnected during game. Resetting for new match...');
+            resetGameForNewMatch();
+        } else {
+            broadcastPlayerCount();
         }
     });
 
     socket.on('requestReset', () => {
         if (gameState.winner || !gameState.gameStarted) {
-            initializeGame();
-            io.emit('gameReset');
-            io.emit('gameState', getPublicGameState());
+            resetGameForNewMatch();
         }
     });
 });
 
 initializeGame();
-
-setInterval(gameTick, TICK_INTERVAL);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

@@ -42,6 +42,17 @@ body {
     margin-bottom: 10px;
 }
 
+#player-counter {
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: #f39c12;
+    margin-bottom: 8px;
+    padding: 5px 15px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    display: inline-block;
+}
+
 #player-info {
     font-size: 1.1rem;
     padding: 5px 15px;

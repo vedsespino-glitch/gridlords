@@ -6,6 +6,7 @@ const resetBtn = document.getElementById('resetBtn');
 const classModal = document.getElementById('class-modal');
 const tankBtn = document.getElementById('tank-btn');
 const rusherBtn = document.getElementById('rusher-btn');
+const playerCounterEl = document.getElementById('player-counter');
 
 const GRID_SIZE = 20;
 const CELL_SIZE = 30;
@@ -109,6 +110,17 @@ function connectToServer(selectedClass) {
         statusEl.textContent = 'Game Reset! Waiting for players...';
         statusEl.style.background = '#f39c12';
         resetBtn.style.display = 'none';
+    });
+
+    socket.on('playerCount', (data) => {
+        const { current, required } = data;
+        if (current === required) {
+            playerCounterEl.textContent = `Jugadores: ${current}/${required} - Iniciando...`;
+            playerCounterEl.style.color = '#27ae60';
+        } else {
+            playerCounterEl.textContent = `Jugadores: ${current}/${required}`;
+            playerCounterEl.style.color = '#f39c12';
+        }
     });
 }
 
