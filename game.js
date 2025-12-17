@@ -35,11 +35,11 @@ let selectedCell = null;
 let gameStarted = false;
 
 function connectToServer() {
-    socket = io({
-        transports: ['polling', 'websocket'],
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000
+
+    socket = io(´https://gridlords.onrender.com', {
+                transports: ['websocket'], 
+                upgrade: false,
+                timeout: 2000
     });
 
     socket.on('connect', () => {
