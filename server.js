@@ -31,6 +31,7 @@ const TERRAIN = {
 let gameState = {
     grid: [],
     players: {},
+    playerClasses: {},
     playerCount: 0,
     gameStarted: false,
     winner: null
@@ -40,6 +41,7 @@ function initializeGame() {
     gameState = {
         grid: [],
         players: {},
+        playerClasses: {},
         playerCount: 0,
         gameStarted: false,
         winner: null
@@ -94,7 +96,15 @@ function gameTick() {
         for (let x = 0; x < GRID_SIZE; x++) {
             const cell = gameState.grid[y][x];
             if (cell.terrain === TERRAIN.GENERAL && cell.owner) {
-                cell.troops += 1;
+                // Find the player with this color and check their class
+                const playerId = Object.keys(gameState.players).find(
+                    id => gameState.players[id] === cell.owner
+                );
+                const playerClass = playerId ? gameState.playerClasses[playerId] : null;
+                
+                // Tank class produces 2 troops per second, others produce 1
+                const troopProduction = playerClass === 'tank' ? 2 : 1;
+                cell.troops += troopProduction;
             }
         }
     }
@@ -167,6 +177,10 @@ function executeMove(playerId, from, to) {
 io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
 
+    // Get player class from connection query
+    const playerClass = socket.handshake.query.playerClass || 'rusher';
+    console.log(`Player ${socket.id} selected class: ${playerClass}`);
+
     if (gameState.playerCount >= 2) {
         socket.emit('gameFull');
         socket.disconnect();
@@ -181,9 +195,24 @@ io.on('connection', (socket) => {
     }
 
     gameState.players[socket.id] = playerColor;
+    gameState.playerClasses[socket.id] = playerClass;
     gameState.playerCount++;
 
-    socket.emit('playerAssigned', { color: playerColor });
+    // Apply Rusher bonus: Start with 30 troops instead of default
+    if (playerClass === 'rusher') {
+        // Find the general cell for this player's color and set troops to 30
+        for (let y = 0; y < GRID_SIZE; y++) {
+            for (let x = 0; x < GRID_SIZE; x++) {
+                const cell = gameState.grid[y][x];
+                if (cell.terrain === TERRAIN.GENERAL && cell.owner === playerColor) {
+                    cell.troops = 30;
+                    console.log(`Rusher bonus applied: ${playerColor} general now has 30 troops`);
+                }
+            }
+        }
+    }
+
+    socket.emit('playerAssigned', { color: playerColor, playerClass: playerClass });
     console.log(`Player ${socket.id} assigned color: ${playerColor}`);
 
     if (gameState.playerCount === 2 && !gameState.gameStarted) {
@@ -207,6 +236,7 @@ io.on('connection', (socket) => {
         console.log('Player disconnected:', socket.id);
         const disconnectedColor = gameState.players[socket.id];
         delete gameState.players[socket.id];
+        delete gameState.playerClasses[socket.id];
         gameState.playerCount--;
 
         if (gameState.gameStarted && !gameState.winner && gameState.playerCount < 2) {
