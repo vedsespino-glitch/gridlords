@@ -3,6 +3,9 @@ const ctx = canvas.getContext('2d');
 const statusEl = document.getElementById('status');
 const playerInfoEl = document.getElementById('player-info');
 const resetBtn = document.getElementById('resetBtn');
+const classModal = document.getElementById('class-modal');
+const tankBtn = document.getElementById('tank-btn');
+const rusherBtn = document.getElementById('rusher-btn');
 
 const GRID_SIZE = 20;
 const CELL_SIZE = 30;
@@ -31,15 +34,18 @@ const TERRAIN = {
 let socket;
 let gameState = null;
 let playerColor = null;
+let playerClass = null;
 let selectedCell = null;
 let gameStarted = false;
 
-function connectToServer() {
+function connectToServer(selectedClass) {
+    playerClass = selectedClass;
 
-    socket = io(´https://gridlords.onrender.com', {
+    socket = io('https://gridlords.onrender.com', {
                 transports: ['websocket'], 
                 upgrade: false,
-                timeout: 2000
+                timeout: 2000,
+                query: { playerClass: selectedClass }
     });
 
     socket.on('connect', () => {
@@ -62,7 +68,9 @@ function connectToServer() {
 
     socket.on('playerAssigned', (data) => {
         playerColor = data.color;
-        playerInfoEl.textContent = `You are: ${playerColor.toUpperCase()}`;
+        const classLabel = playerClass === 'tank' ? 'Tank' : 'Rusher';
+        const classIcon = playerClass === 'tank' ? '🛡️' : '⚡';
+        playerInfoEl.textContent = `You are: ${playerColor.toUpperCase()} ${classIcon} ${classLabel}`;
         playerInfoEl.className = playerColor;
     });
 
@@ -244,5 +252,18 @@ resetBtn.addEventListener('click', () => {
     socket.emit('requestReset');
 });
 
-connectToServer();
+// Class selection event handlers
+tankBtn.addEventListener('click', () => {
+    classModal.classList.add('hidden');
+    statusEl.textContent = 'Connecting...';
+    connectToServer('tank');
+});
+
+rusherBtn.addEventListener('click', () => {
+    classModal.classList.add('hidden');
+    statusEl.textContent = 'Connecting...';
+    connectToServer('rusher');
+});
+
+// Initial render (without connection - wait for class selection)
 render();
