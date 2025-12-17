@@ -219,9 +219,12 @@ io.on('connection', (socket) => {
         gameState.gameStarted = true;
         io.emit('gameStart');
         console.log('Game started!');
+        // Emit gameState to ALL clients so everyone has the updated gameStarted flag
+        io.emit('gameState', getPublicGameState());
+    } else {
+        // Only emit to the connecting socket if game hasn't started yet
+        socket.emit('gameState', getPublicGameState());
     }
-
-    socket.emit('gameState', getPublicGameState());
 
     socket.on('move', (data) => {
         if (!gameState.gameStarted || gameState.winner) return;
