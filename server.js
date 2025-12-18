@@ -58,17 +58,34 @@ const ARTILLERY_CONFIG = {
     DAMAGE: 5
 };
 
+const PLAYER_COLORS = ['red', 'blue', 'green', 'yellow', 'purple'];
+const MAX_PLAYERS = 4;
+const MIN_PLAYERS_TO_START = 2;
+
 let gameState = {
     grid: [],
     players: {},
     playerClasses: {},
     playerNames: {},
+    playerColors: {},
+    deadPlayers: {},
     playerCount: 0,
     gameStarted: false,
-    winner: null
+    winner: null,
+    alivePlayers: 0
 };
 
 const MIN_SPAWN_DISTANCE = 10;
+
+function getCornerSpawnPositions() {
+    const margin = 2;
+    return [
+        { x: margin, y: margin },
+        { x: GRID_SIZE - margin - 1, y: margin },
+        { x: margin, y: GRID_SIZE - margin - 1 },
+        { x: GRID_SIZE - margin - 1, y: GRID_SIZE - margin - 1 }
+    ];
+}
 
 function getRandomSpawnPositions() {
     const margin = 2;
@@ -208,9 +225,13 @@ function initializeGame(){
         players: {},
         playerClasses: {},
         playerNames: {},
+        playerColors: {},
+        deadPlayers: {},
         playerCount: 0,
         gameStarted: false,
-        winner: null
+        winner: null,
+        alivePlayers: 0,
+        spawnPositions: getCornerSpawnPositions()
     };
 
     for (let y = 0; y < GRID_SIZE; y++) {
@@ -226,31 +247,23 @@ function initializeGame(){
         }
     }
 
-    const spawnPositions = getRandomSpawnPositions();
-    const redSpawn = spawnPositions.pos1;
-    const blueSpawn = spawnPositions.pos2;
-    
-    console.log(`Random spawn positions: Red(${redSpawn.x},${redSpawn.y}) Blue(${blueSpawn.x},${blueSpawn.y})`);
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        const spawn = gameState.spawnPositions[i];
+        const color = PLAYER_COLORS[i];
+        
+        gameState.grid[spawn.y][spawn.x] = {
+            terrain: TERRAIN.EMPTY,
+            owner: color,
+            troops: 10,
+            unit: UNIT.GENERAL
+        };
+        
+        clearMountainsAround(spawn.x, spawn.y);
+        console.log(`Spawn position for ${color}: (${spawn.x},${spawn.y})`);
+    }
 
-    gameState.grid[redSpawn.y][redSpawn.x] = {
-        terrain: TERRAIN.EMPTY,
-        owner: 'red',
-        troops: 10,
-        unit: UNIT.GENERAL
-    };
-
-    gameState.grid[blueSpawn.y][blueSpawn.x] = {
-        terrain: TERRAIN.EMPTY,
-        owner: 'blue',
-        troops: 10,
-        unit: UNIT.GENERAL
-    };
-
-    clearMountainsAround(redSpawn.x, redSpawn.y);
-    clearMountainsAround(blueSpawn.x, blueSpawn.y);
-
-    const outposts = generateOutposts(redSpawn, blueSpawn);
-    generateArtillery(redSpawn, blueSpawn, outposts);
+    const outposts = generateOutposts(gameState.spawnPositions[0], gameState.spawnPositions[1]);
+    generateArtillery(gameState.spawnPositions[0], gameState.spawnPositions[1], outposts);
 }
 
 function gameTick(){
@@ -371,21 +384,50 @@ function checkAndStartGame() {
     
     console.log(`Checking game start: players=${actualPlayerCount}, allHaveClass=${allPlayersHaveClass}, gameStarted=${gameState.gameStarted}`);
     
-    if (actualPlayerCount === 2 && allPlayersHaveClass && !gameState.gameStarted) {
-        gameState.gameStarted = true;
-        gameState.playerCount = 2;
-        io.emit('gameStart');
-        emitGameStateToAll();
-        startGameLoop();
-        console.log('Game started with 2 players!');
+    if (actualPlayerCount === MAX_PLAYERS && allPlayersHaveClass && !gameState.gameStarted) {
+        startBattleRoyale();
     }
     
     broadcastPlayerCount();
 }
 
+function forceStartGame() {
+    const actualPlayerCount = Object.keys(gameState.players).length;
+    if (actualPlayerCount >= MIN_PLAYERS_TO_START && !gameState.gameStarted) {
+        startBattleRoyale();
+        return true;
+    }
+    return false;
+}
+
+function startBattleRoyale() {
+    gameState.gameStarted = true;
+    gameState.alivePlayers = Object.keys(gameState.players).length;
+    gameState.playerCount = gameState.alivePlayers;
+    
+    for (const socketId of Object.keys(gameState.players)) {
+        gameState.deadPlayers[socketId] = false;
+    }
+    
+    io.emit('gameStart', { 
+        totalPlayers: gameState.alivePlayers,
+        mode: 'battle_royale'
+    });
+    emitGameStateToAll();
+    startGameLoop();
+    console.log(`Battle Royale started with ${gameState.alivePlayers} players!`);
+}
+
 function broadcastPlayerCount() {
     const count = Object.keys(gameState.players).length;
-    io.emit('playerCount', { current: count, required: 2 });
+    const alive = gameState.gameStarted ? gameState.alivePlayers : count;
+    io.emit('playerCount', { 
+        current: count, 
+        required: MAX_PLAYERS,
+        minRequired: MIN_PLAYERS_TO_START,
+        alive: alive,
+        canForceStart: count >= MIN_PLAYERS_TO_START && !gameState.gameStarted
+    });
 }
 
 function resetGameForNewMatch() {
@@ -504,6 +546,7 @@ function executeMove(playerId, from, to, splitMove = false) {
     
     let moveSuccessful = false;
     let capturedEnemyGeneral = false;
+    let capturedOwner = null;
 
     if (toCell.owner === playerColor) {
         toCell.troops += troopsToMove;
@@ -513,8 +556,7 @@ function executeMove(playerId, from, to, splitMove = false) {
         if (result > 0) {
             if (toCell.unit === UNIT.GENERAL && toCell.owner) {
                 capturedEnemyGeneral = true;
-                gameState.winner = playerColor;
-                io.emit('gameOver', { winner: playerColor });
+                capturedOwner = toCell.owner;
             }
 
             toCell.owner = playerColor;
@@ -537,6 +579,15 @@ function executeMove(playerId, from, to, splitMove = false) {
         console.log(`General moved from (${from.x},${from.y}) to (${to.x},${to.y}) for ${playerColor}`);
     }
 
+    if (capturedEnemyGeneral && capturedOwner) {
+        const loserSocketId = Object.keys(gameState.players).find(
+            id => gameState.players[id] === capturedOwner
+        );
+        if (loserSocketId) {
+            eliminatePlayer(loserSocketId, playerId, 'captured');
+        }
+    }
+
     emitGameStateToAll();
 }
 
@@ -553,6 +604,71 @@ function broadcastPlayerNames() {
     io.emit('playerNames', names);
 }
 
+function eliminatePlayer(loserSocketId, attackerSocketId, reason = 'captured') {
+    const loserColor = gameState.players[loserSocketId];
+    const attackerColor = attackerSocketId ? gameState.players[attackerSocketId] : null;
+    
+    console.log(`Eliminating player ${loserColor} (reason: ${reason})`);
+    
+    gameState.deadPlayers[loserSocketId] = true;
+    gameState.alivePlayers--;
+    
+    if (attackerColor && reason === 'captured') {
+        let cellsTransferred = 0;
+        for (let y = 0; y < GRID_SIZE; y++) {
+            for (let x = 0; x < GRID_SIZE; x++) {
+                const cell = gameState.grid[y][x];
+                if (cell.owner === loserColor) {
+                    cell.owner = attackerColor;
+                    cellsTransferred++;
+                }
+            }
+        }
+        console.log(`Transferred ${cellsTransferred} cells from ${loserColor} to ${attackerColor}`);
+    }
+    
+    const loserSocket = io.sockets.sockets.get(loserSocketId);
+    if (loserSocket) {
+        loserSocket.emit('eliminated', { 
+            reason: reason,
+            killedBy: attackerColor,
+            placement: gameState.alivePlayers + 1
+        });
+    }
+    
+    io.emit('playerEliminated', {
+        eliminatedColor: loserColor,
+        eliminatedBy: attackerColor,
+        alivePlayers: gameState.alivePlayers
+    });
+    
+    checkForWinner();
+}
+
+function checkForWinner() {
+    if (gameState.alivePlayers === 1) {
+        const winnerSocketId = Object.keys(gameState.players).find(
+            id => !gameState.deadPlayers[id]
+        );
+        
+        if (winnerSocketId) {
+            const winnerColor = gameState.players[winnerSocketId];
+            gameState.winner = winnerColor;
+            
+            io.emit('gameOver', { 
+                winner: winnerColor,
+                reason: 'last_man_standing'
+            });
+            
+            console.log(`Game Over! Winner: ${winnerColor} (Last Man Standing)`);
+        }
+    } else if (gameState.alivePlayers === 0) {
+        gameState.winner = 'draw';
+        io.emit('gameOver', { winner: null, reason: 'draw' });
+        console.log('Game Over! Draw - no survivors');
+    }
+}
+
 io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
 
@@ -561,18 +677,21 @@ io.on('connection', (socket) => {
     console.log(`Player ${socket.id} selected class: ${playerClass}, nickname: ${nickname || 'none'}`);
 
     const actualPlayerCount = Object.keys(gameState.players).length;
-    if (actualPlayerCount >= 2 || gameState.gameStarted) {
+    if (actualPlayerCount >= MAX_PLAYERS || gameState.gameStarted) {
         console.log(`Game full or in progress. Rejecting player ${socket.id}`);
         socket.emit('gameFull');
         socket.disconnect();
         return;
     }
 
-    let playerColor;
-    if (!Object.values(gameState.players).includes('red')) {
-        playerColor = 'red';
-    } else {
-        playerColor = 'blue';
+    const usedColors = Object.values(gameState.players);
+    const playerColor = PLAYER_COLORS.find(color => !usedColors.includes(color));
+    
+    if (!playerColor) {
+        console.log(`No available colors. Rejecting player ${socket.id}`);
+        socket.emit('gameFull');
+        socket.disconnect();
+        return;
     }
 
     const playerNumber = Object.keys(gameState.players).length + 1;
@@ -581,6 +700,7 @@ io.on('connection', (socket) => {
     gameState.players[socket.id] = playerColor;
     gameState.playerClasses[socket.id] = playerClass;
     gameState.playerNames[socket.id] = nickname || defaultName;
+    gameState.playerColors[socket.id] = playerColor;
     gameState.playerCount = Object.keys(gameState.players).length;
 
     if (playerClass === 'rusher') {
@@ -604,6 +724,7 @@ io.on('connection', (socket) => {
 
     socket.on('move', (data) => {
         if (!gameState.gameStarted || gameState.winner) return;
+        if (gameState.deadPlayers[socket.id]) return;
 
         const { from, to, splitMove } = data;
         if (isValidMove(socket.id, from, to)) {
@@ -611,20 +732,31 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('forceStart', () => {
+        console.log(`Player ${socket.id} requested force start`);
+        if (forceStartGame()) {
+            console.log('Force start successful');
+        }
+    });
+
     socket.on('disconnect', () => {
         console.log('Player disconnected:', socket.id);
         const disconnectedColor = gameState.players[socket.id];
+        
+        if (gameState.gameStarted && !gameState.deadPlayers[socket.id]) {
+            eliminatePlayer(socket.id, null, 'disconnect');
+        }
+        
         delete gameState.players[socket.id];
         delete gameState.playerClasses[socket.id];
         delete gameState.playerNames[socket.id];
+        delete gameState.playerColors[socket.id];
+        delete gameState.deadPlayers[socket.id];
         gameState.playerCount = Object.keys(gameState.players).length;
 
         console.log(`Player count after disconnect: ${gameState.playerCount}, gameStarted: ${gameState.gameStarted}`);
 
-        if (gameState.gameStarted && gameState.playerCount < 2) {
-            console.log('Player disconnected during game. Resetting for new match...');
-            resetGameForNewMatch();
-        } else {
+        if (!gameState.gameStarted) {
             broadcastPlayerCount();
         }
     });

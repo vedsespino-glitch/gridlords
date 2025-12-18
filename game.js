@@ -26,8 +26,14 @@ const COLORS = {
     mountain: '#636e72',
     red: '#e74c3c',
     blue: '#3498db',
+    green: '#27ae60',
+    yellow: '#f1c40f',
+    purple: '#9b59b6',
     redLight: '#ff7675',
     blueLight: '#74b9ff',
+    greenLight: '#2ecc71',
+    yellowLight: '#f39c12',
+    purpleLight: '#a569bd',
     grid: '#1a1a2e',
     text: '#ffffff',
     selected: '#f1c40f',
@@ -37,12 +43,41 @@ const COLORS = {
     outpost: '#444444',
     outpostRed: '#c0392b',
     outpostBlue: '#2980b9',
+    outpostGreen: '#1e8449',
+    outpostYellow: '#d4ac0d',
+    outpostPurple: '#7d3c98',
     outpostBorder: '#ffd700',
     artillery: '#ff8c00',
     artilleryRed: '#d35400',
     artilleryBlue: '#2471a3',
+    artilleryGreen: '#196f3d',
+    artilleryYellow: '#b7950b',
+    artilleryPurple: '#6c3483',
     artilleryBorder: '#ffa500'
 };
+
+function getPlayerColor(owner) {
+    if (!owner) return COLORS.empty;
+    return COLORS[owner] || COLORS.empty;
+}
+
+function getPlayerLightColor(owner) {
+    if (!owner) return COLORS.empty;
+    const lightKey = owner + 'Light';
+    return COLORS[lightKey] || COLORS[owner] || COLORS.empty;
+}
+
+function getOutpostColor(owner) {
+    if (!owner) return COLORS.outpost;
+    const key = 'outpost' + owner.charAt(0).toUpperCase() + owner.slice(1);
+    return COLORS[key] || COLORS.outpost;
+}
+
+function getArtilleryColor(owner) {
+    if (!owner) return COLORS.artillery;
+    const key = 'artillery' + owner.charAt(0).toUpperCase() + owner.slice(1);
+    return COLORS[key] || COLORS.artillery;
+}
 
 const TERRAIN = {
     EMPTY: 0,
@@ -117,14 +152,20 @@ function connectToServer(selectedClass) {
     socket.on('gameOver', (data) => {
         gameStarted = false;
         const isWinner = data.winner === playerColor;
-        const winnerName = playerNames[data.winner] || data.winner.toUpperCase();
+        const winnerName = playerNames[data.winner] || (data.winner ? data.winner.toUpperCase() : 'NADIE');
         
         gameOverOverlay.classList.remove('hidden', 'victory', 'defeat');
         gameOverOverlay.classList.add(isWinner ? 'victory' : 'defeat');
         
-        if (data.reason === 'disconnect') {
+        if (data.reason === 'last_man_standing') {
+            gameOverTitle.textContent = isWinner ? 'VICTORIA!' : `VICTORIA DE ${winnerName}!`;
+            gameOverMessage.textContent = isWinner ? 'Eres el ultimo superviviente! Conquistaste todos los reinos!' : 'El juego ha terminado.';
+        } else if (data.reason === 'disconnect') {
             gameOverTitle.textContent = isWinner ? 'VICTORIA!' : 'DERROTA...';
             gameOverMessage.textContent = isWinner ? 'Tu oponente se desconecto.' : 'Te desconectaste.';
+        } else if (data.reason === 'draw') {
+            gameOverTitle.textContent = 'EMPATE';
+            gameOverMessage.textContent = 'No quedan supervivientes!';
         } else {
             gameOverTitle.textContent = `VICTORIA DE ${winnerName}!`;
             gameOverMessage.textContent = isWinner ? 'Capturaste al General enemigo!' : 'Tu General fue capturado!';
@@ -146,19 +187,55 @@ function connectToServer(selectedClass) {
     });
 
     socket.on('playerCount', (data) => {
-        const { current, required } = data;
-        if (current === required) {
+        const { current, required, minRequired, canForceStart, alive } = data;
+        
+        if (gameStarted) {
+            playerCounterEl.textContent = `Jugadores vivos: ${alive}`;
+            playerCounterEl.style.color = '#27ae60';
+        } else if (current === required) {
             playerCounterEl.textContent = `Jugadores: ${current}/${required} - Iniciando...`;
             playerCounterEl.style.color = '#27ae60';
         } else {
             playerCounterEl.textContent = `Jugadores: ${current}/${required}`;
             playerCounterEl.style.color = '#f39c12';
         }
+        
+        const forceStartBtn = document.getElementById('forceStartBtn');
+        if (forceStartBtn) {
+            forceStartBtn.style.display = canForceStart ? 'inline-block' : 'none';
+        }
     });
 
     socket.on('playerNames', (data) => {
         playerNames = data;
         updateMatchInfo();
+    });
+
+    socket.on('eliminated', (data) => {
+        console.log(`%c☠️ ELIMINADO! %cPosicion: #${data.placement}`, 
+            'background: #e74c3c; color: white; font-weight: bold; padding: 2px 6px; border-radius: 3px;',
+            'color: #e74c3c; font-weight: bold;'
+        );
+        
+        gameOverOverlay.classList.remove('hidden', 'victory', 'defeat');
+        gameOverOverlay.classList.add('defeat');
+        gameOverTitle.textContent = 'ELIMINADO';
+        gameOverMessage.textContent = `Quedaste en posicion #${data.placement}. ${data.killedBy ? playerNames[data.killedBy] + ' absorbio tu reino!' : 'Te desconectaste.'}`;
+        statusEl.textContent = `Eliminado - #${data.placement}`;
+        statusEl.style.background = '#e74c3c';
+    });
+
+    socket.on('playerEliminated', (data) => {
+        const eliminatedName = playerNames[data.eliminatedColor] || data.eliminatedColor.toUpperCase();
+        const killerName = data.eliminatedBy ? (playerNames[data.eliminatedBy] || data.eliminatedBy.toUpperCase()) : 'Desconexion';
+        
+        console.log(`%c⚔️ ELIMINACION! %c${eliminatedName} fue eliminado por ${killerName}. Quedan ${data.alivePlayers} jugadores.`, 
+            'background: #9b59b6; color: white; font-weight: bold; padding: 2px 6px; border-radius: 3px;',
+            'color: #9b59b6; font-weight: bold;'
+        );
+        
+        statusEl.textContent = `${eliminatedName} eliminado! Quedan ${data.alivePlayers}`;
+        statusEl.style.background = '#9b59b6';
     });
 
     socket.on('artilleryFire', (data) => {
@@ -192,26 +269,12 @@ function render() {
 
             if (cell.terrain === TERRAIN.MOUNTAIN) {
                 fillColor = COLORS.mountain;
-            } else if (cell.terrain === TERRAIN.OUTPOST && !cell.owner) {
-                fillColor = COLORS.outpost;
-            } else if (cell.terrain === TERRAIN.ARTILLERY && !cell.owner) {
-                fillColor = COLORS.artillery;
-            } else if (cell.owner === 'red') {
-                if (cell.terrain === TERRAIN.OUTPOST) {
-                    fillColor = COLORS.outpostRed;
-                } else if (cell.terrain === TERRAIN.ARTILLERY) {
-                    fillColor = COLORS.artilleryRed;
-                } else {
-                    fillColor = COLORS.red;
-                }
-            } else if (cell.owner === 'blue') {
-                if (cell.terrain === TERRAIN.OUTPOST) {
-                    fillColor = COLORS.outpostBlue;
-                } else if (cell.terrain === TERRAIN.ARTILLERY) {
-                    fillColor = COLORS.artilleryBlue;
-                } else {
-                    fillColor = COLORS.blue;
-                }
+            } else if (cell.terrain === TERRAIN.OUTPOST) {
+                fillColor = getOutpostColor(cell.owner);
+            } else if (cell.terrain === TERRAIN.ARTILLERY) {
+                fillColor = getArtilleryColor(cell.owner);
+            } else if (cell.owner) {
+                fillColor = getPlayerColor(cell.owner);
             }
 
             ctx.fillStyle = fillColor;
@@ -322,15 +385,21 @@ function updateMatchInfo() {
         return;
     }
     
-    const myName = playerNames[playerColor] || playerColor.toUpperCase();
-    const opponentColor = playerColor === 'red' ? 'blue' : 'red';
-    const opponentName = playerNames[opponentColor] || 'Esperando...';
+    const allColors = ['red', 'blue', 'green', 'yellow', 'purple'];
+    const activePlayers = allColors.filter(color => playerNames[color]);
     
-    matchInfoEl.innerHTML = `
-        <span class="player-name ${playerColor} you">${myName}</span>
-        <span style="color: #888;"> VS </span>
-        <span class="player-name ${opponentColor}">${opponentName}</span>
-    `;
+    if (activePlayers.length === 0) {
+        matchInfoEl.innerHTML = '';
+        return;
+    }
+    
+    const playerSpans = activePlayers.map(color => {
+        const name = playerNames[color] || color.toUpperCase();
+        const isYou = color === playerColor;
+        return `<span class="player-name ${color}${isYou ? ' you' : ''}">${name}${isYou ? ' (Tu)' : ''}</span>`;
+    });
+    
+    matchInfoEl.innerHTML = playerSpans.join('<span style="color: #888;"> vs </span>');
 }
 
 canvas.addEventListener('click', (event) => {
@@ -438,6 +507,14 @@ rusherBtn.addEventListener('click', () => {
 playAgainBtn.addEventListener('click', () => {
     if (socket) {
         socket.emit('requestReset');
+    }
+});
+
+const forceStartBtn = document.getElementById('forceStartBtn');
+forceStartBtn.addEventListener('click', () => {
+    if (socket) {
+        socket.emit('forceStart');
+        forceStartBtn.style.display = 'none';
     }
 });
 
