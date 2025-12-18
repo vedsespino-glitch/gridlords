@@ -19,15 +19,14 @@ app.get('/', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok', players: gameState.playerCount });
+    const activeRooms = Object.keys(rooms).length;
+    const totalPlayers = Object.values(rooms).reduce((sum, room) => sum + Object.keys(room.players).length, 0);
+    res.json({ status: 'ok', activeRooms, totalPlayers });
 });
 
 const GRID_SIZE = 30;
 const TICK_INTERVAL = 1000;
 const MOUNTAIN_DENSITY = 0.15;
-
-let gameLoopInterval = null;
-let artilleryLoopInterval = null;
 
 const TERRAIN = {
     EMPTY: 0,
@@ -62,18 +61,50 @@ const PLAYER_COLORS = ['red', 'blue', 'green', 'yellow', 'purple'];
 const MAX_PLAYERS = 4;
 const MIN_PLAYERS_TO_START = 2;
 
-let gameState = {
-    grid: [],
-    players: {},
-    playerClasses: {},
-    playerNames: {},
-    playerColors: {},
-    deadPlayers: {},
-    playerCount: 0,
-    gameStarted: false,
-    winner: null,
-    alivePlayers: 0
-};
+const rooms = {};
+const socketToRoom = {};
+
+function generateRoomId() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let roomId;
+    do {
+        roomId = '';
+        for (let i = 0; i < 4; i++) {
+            roomId += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+    } while (rooms[roomId]);
+    return roomId;
+}
+
+function createRoomState(hostSocketId) {
+    return {
+        grid: [],
+        players: {},
+        playerClasses: {},
+        playerNames: {},
+        playerColors: {},
+        deadPlayers: {},
+        playerCount: 0,
+        gameStarted: false,
+        winner: null,
+        alivePlayers: 0,
+        hostSocketId: hostSocketId,
+        spawnPositions: null,
+        timers: {
+            gameLoop: null,
+            artilleryLoop: null
+        }
+    };
+}
+
+function getRoomBySocketId(socketId) {
+    const roomId = socketToRoom[socketId];
+    return roomId ? rooms[roomId] : null;
+}
+
+function getRoomIdBySocketId(socketId) {
+    return socketToRoom[socketId] || null;
+}
 
 const MIN_SPAWN_DISTANCE = 15;
 
@@ -87,45 +118,25 @@ function getCornerSpawnPositions() {
     ];
 }
 
-function getRandomSpawnPositions() {
-    const margin = 2;
-    const maxAttempts = 100;
-    
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const x1 = margin + Math.floor(Math.random() * (GRID_SIZE - 2 * margin));
-        const y1 = margin + Math.floor(Math.random() * (GRID_SIZE - 2 * margin));
-        const x2 = margin + Math.floor(Math.random() * (GRID_SIZE - 2 * margin));
-        const y2 = margin + Math.floor(Math.random() * (GRID_SIZE - 2 * margin));
-        
-        const manhattanDistance = Math.abs(x2 - x1) + Math.abs(y2 - y1);
-        
-        if (manhattanDistance > MIN_SPAWN_DISTANCE) {
-            return { pos1: { x: x1, y: y1 }, pos2: { x: x2, y: y2 } };
-        }
-    }
-    
-    return { pos1: { x: 2, y: 2 }, pos2: { x: GRID_SIZE - 3, y: GRID_SIZE - 3 } };
+function getManhattanDistance(x1, y1, x2, y2) {
+    return Math.abs(x2 - x1) + Math.abs(y2 - y1);
 }
 
-function clearMountainsAround(x, y) {
+function clearMountainsAround(roomState, x, y) {
     for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
             const ny = y + dy;
             const nx = x + dx;
-            if (gameState.grid[ny] && gameState.grid[ny][nx]) {
-                if (gameState.grid[ny][nx].terrain === TERRAIN.MOUNTAIN) {
-                    gameState.grid[ny][nx].terrain = TERRAIN.EMPTY;
+            if (roomState.grid[ny] && roomState.grid[ny][nx]) {
+                if (roomState.grid[ny][nx].terrain === TERRAIN.MOUNTAIN) {
+                    roomState.grid[ny][nx].terrain = TERRAIN.EMPTY;
                 }
             }
         }
     }
 }
 
-function getManhattanDistance(x1, y1, x2, y2) {
-    return Math.abs(x2 - x1) + Math.abs(y2 - y1);
-}
-
-function generateOutposts(redSpawn, blueSpawn) {
+function generateOutposts(roomState, redSpawn, blueSpawn) {
     const outpostCount = OUTPOST_CONFIG.MIN_COUNT + Math.floor(Math.random() * (OUTPOST_CONFIG.MAX_COUNT - OUTPOST_CONFIG.MIN_COUNT + 1));
     const outposts = [];
     const maxAttempts = 200;
@@ -145,7 +156,7 @@ function generateOutposts(redSpawn, blueSpawn) {
                 continue;
             }
             
-            const cell = gameState.grid[y][x];
+            const cell = roomState.grid[y][x];
             if (cell.terrain !== TERRAIN.EMPTY || cell.owner !== null) {
                 continue;
             }
@@ -157,7 +168,7 @@ function generateOutposts(redSpawn, blueSpawn) {
                 continue;
             }
             
-            gameState.grid[y][x] = {
+            roomState.grid[y][x] = {
                 terrain: TERRAIN.OUTPOST,
                 owner: null,
                 troops: OUTPOST_CONFIG.INITIAL_TROOPS,
@@ -168,11 +179,11 @@ function generateOutposts(redSpawn, blueSpawn) {
         }
     }
     
-    console.log(`Generated ${outposts.length} Outposts at positions:`, outposts.map(o => `(${o.x},${o.y})`).join(', '));
+    console.log('Generated ' + outposts.length + ' Outposts');
     return outposts;
 }
 
-function generateArtillery(redSpawn, blueSpawn, existingStructures) {
+function generateArtillery(roomState, redSpawn, blueSpawn, existingStructures) {
     const artilleryCount = ARTILLERY_CONFIG.MIN_COUNT + Math.floor(Math.random() * (ARTILLERY_CONFIG.MAX_COUNT - ARTILLERY_CONFIG.MIN_COUNT + 1));
     const artillery = [];
     const maxAttempts = 200;
@@ -192,7 +203,7 @@ function generateArtillery(redSpawn, blueSpawn, existingStructures) {
                 continue;
             }
             
-            const cell = gameState.grid[y][x];
+            const cell = roomState.grid[y][x];
             if (cell.terrain !== TERRAIN.EMPTY || cell.owner !== null) {
                 continue;
             }
@@ -204,7 +215,7 @@ function generateArtillery(redSpawn, blueSpawn, existingStructures) {
                 continue;
             }
             
-            gameState.grid[y][x] = {
+            roomState.grid[y][x] = {
                 terrain: TERRAIN.ARTILLERY,
                 owner: null,
                 troops: ARTILLERY_CONFIG.INITIAL_TROOPS,
@@ -215,30 +226,19 @@ function generateArtillery(redSpawn, blueSpawn, existingStructures) {
         }
     }
     
-    console.log(`Generated ${artillery.length} Artillery at positions:`, artillery.map(a => `(${a.x},${a.y})`).join(', '));
+    console.log('Generated ' + artillery.length + ' Artillery');
     return artillery;
 }
 
-function initializeGame(){
-    gameState = {
-        grid: [],
-        players: {},
-        playerClasses: {},
-        playerNames: {},
-        playerColors: {},
-        deadPlayers: {},
-        playerCount: 0,
-        gameStarted: false,
-        winner: null,
-        alivePlayers: 0,
-        spawnPositions: getCornerSpawnPositions()
-    };
+function initializeRoomMap(roomState) {
+    roomState.spawnPositions = getCornerSpawnPositions();
+    roomState.grid = [];
 
     for (let y = 0; y < GRID_SIZE; y++) {
-        gameState.grid[y] = [];
+        roomState.grid[y] = [];
         for (let x = 0; x < GRID_SIZE; x++) {
             const isMountain = Math.random() < MOUNTAIN_DENSITY;
-            gameState.grid[y][x] = {
+            roomState.grid[y][x] = {
                 terrain: isMountain ? TERRAIN.MOUNTAIN : TERRAIN.EMPTY,
                 owner: null,
                 troops: 0,
@@ -248,36 +248,36 @@ function initializeGame(){
     }
 
     for (let i = 0; i < MAX_PLAYERS; i++) {
-        const spawn = gameState.spawnPositions[i];
+        const spawn = roomState.spawnPositions[i];
         const color = PLAYER_COLORS[i];
         
-        gameState.grid[spawn.y][spawn.x] = {
+        roomState.grid[spawn.y][spawn.x] = {
             terrain: TERRAIN.EMPTY,
             owner: color,
             troops: 10,
             unit: UNIT.GENERAL
         };
         
-        clearMountainsAround(spawn.x, spawn.y);
-        console.log(`Spawn position for ${color}: (${spawn.x},${spawn.y})`);
+        clearMountainsAround(roomState, spawn.x, spawn.y);
     }
 
-    const outposts = generateOutposts(gameState.spawnPositions[0], gameState.spawnPositions[1]);
-    generateArtillery(gameState.spawnPositions[0], gameState.spawnPositions[1], outposts);
+    const outposts = generateOutposts(roomState, roomState.spawnPositions[0], roomState.spawnPositions[1]);
+    generateArtillery(roomState, roomState.spawnPositions[0], roomState.spawnPositions[1], outposts);
 }
 
-function gameTick(){
-    if (!gameState.gameStarted || gameState.winner) return;
+function gameTick(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState || !roomState.gameStarted || roomState.winner) return;
 
     for (let y = 0; y < GRID_SIZE; y++) {
         for (let x = 0; x < GRID_SIZE; x++) {
-            const cell = gameState.grid[y][x];
+            const cell = roomState.grid[y][x];
             
             if (cell.unit === UNIT.GENERAL && cell.owner) {
-                const playerId = Object.keys(gameState.players).find(
-                    id => gameState.players[id] === cell.owner
+                const playerId = Object.keys(roomState.players).find(
+                    id => roomState.players[id] === cell.owner
                 );
-                const playerClass = playerId ? gameState.playerClasses[playerId] : null;
+                const playerClass = playerId ? roomState.playerClasses[playerId] : null;
                 const troopProduction = playerClass === 'tank' ? 2 : 1;
                 cell.troops += troopProduction;
             }
@@ -288,18 +288,19 @@ function gameTick(){
         }
     }
 
-    emitGameStateToAll();
+    emitGameStateToRoom(roomId);
 }
 
-function artilleryTick() {
-    if (!gameState.gameStarted || gameState.winner) return;
+function artilleryTick(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState || !roomState.gameStarted || roomState.winner) return;
 
     const directions = [[0, 1], [0, -1], [1, 0], [-1, 0]];
     let stateChanged = false;
 
     for (let y = 0; y < GRID_SIZE; y++) {
         for (let x = 0; x < GRID_SIZE; x++) {
-            const cell = gameState.grid[y][x];
+            const cell = roomState.grid[y][x];
             
             if (cell.terrain !== TERRAIN.ARTILLERY) continue;
             
@@ -311,7 +312,7 @@ function artilleryTick() {
                 
                 if (nx < 0 || nx >= GRID_SIZE || ny < 0 || ny >= GRID_SIZE) continue;
                 
-                const targetCell = gameState.grid[ny][nx];
+                const targetCell = roomState.grid[ny][nx];
                 
                 if (!targetCell.owner) continue;
                 
@@ -321,7 +322,7 @@ function artilleryTick() {
                     const targetOwner = targetCell.owner;
                     targetCell.troops -= ARTILLERY_CONFIG.DAMAGE;
                     
-                    io.emit('artilleryFire', {
+                    io.to(roomId).emit('artilleryFire', {
                         from: { x, y },
                         to: { nx, ny },
                         damage: ARTILLERY_CONFIG.DAMAGE,
@@ -334,125 +335,159 @@ function artilleryTick() {
                         targetCell.owner = null;
                         
                         if (targetCell.unit === UNIT.GENERAL) {
-                            const winningColor = targetOwner === 'red' ? 'blue' : 'red';
-                            gameState.winner = winningColor;
-                            io.emit('gameOver', { winner: winningColor });
+                            const loserSocketId = Object.keys(roomState.players).find(
+                                id => roomState.players[id] === targetOwner
+                            );
+                            if (loserSocketId) {
+                                eliminatePlayer(roomId, loserSocketId, null, 'artillery');
+                            }
                             targetCell.unit = null;
                         }
                     }
                     
                     stateChanged = true;
-                    console.log(`Artillery at (${x},${y}) fired at (${nx},${ny}), damage: ${ARTILLERY_CONFIG.DAMAGE}`);
                 }
             }
         }
     }
 
     if (stateChanged) {
-        emitGameStateToAll();
+        emitGameStateToRoom(roomId);
     }
 }
 
-function startGameLoop(){
-    if (gameLoopInterval) {
-        console.log('Game loop already running, skipping start');
+function startGameLoop(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState) return;
+    
+    if (roomState.timers.gameLoop) {
+        console.log('Game loop already running for room ' + roomId + ', skipping start');
         return;
     }
-    console.log('--- GAME LOOP STARTED ---');
-    gameLoopInterval = setInterval(gameTick, TICK_INTERVAL);
-    artilleryLoopInterval = setInterval(artilleryTick, ARTILLERY_CONFIG.FIRE_INTERVAL);
+    console.log('--- GAME LOOP STARTED for room ' + roomId + ' ---');
+    roomState.timers.gameLoop = setInterval(() => gameTick(roomId), TICK_INTERVAL);
+    roomState.timers.artilleryLoop = setInterval(() => artilleryTick(roomId), ARTILLERY_CONFIG.FIRE_INTERVAL);
 }
 
-function stopGameLoop() {
-    if (gameLoopInterval) {
-        clearInterval(gameLoopInterval);
-        gameLoopInterval = null;
-        console.log('--- GAME LOOP STOPPED ---');
+function stopGameLoop(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState) return;
+    
+    if (roomState.timers.gameLoop) {
+        clearInterval(roomState.timers.gameLoop);
+        roomState.timers.gameLoop = null;
+        console.log('--- GAME LOOP STOPPED for room ' + roomId + ' ---');
     }
-    if (artilleryLoopInterval) {
-        clearInterval(artilleryLoopInterval);
-        artilleryLoopInterval = null;
-        console.log('--- ARTILLERY LOOP STOPPED ---');
+    if (roomState.timers.artilleryLoop) {
+        clearInterval(roomState.timers.artilleryLoop);
+        roomState.timers.artilleryLoop = null;
     }
 }
 
-function checkAndStartGame() {
-    const actualPlayerCount = Object.keys(gameState.players).length;
-    const allPlayersHaveClass = Object.keys(gameState.players).every(
-        id => gameState.playerClasses[id]
-    );
+function startBattleRoyale(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState) return;
     
-    console.log(`Checking game start: players=${actualPlayerCount}, allHaveClass=${allPlayersHaveClass}, gameStarted=${gameState.gameStarted}`);
+    roomState.gameStarted = true;
+    roomState.alivePlayers = Object.keys(roomState.players).length;
+    roomState.playerCount = roomState.alivePlayers;
     
-    if (actualPlayerCount === MAX_PLAYERS && allPlayersHaveClass && !gameState.gameStarted) {
-        startBattleRoyale();
+    for (const socketId of Object.keys(roomState.players)) {
+        roomState.deadPlayers[socketId] = false;
     }
     
-    broadcastPlayerCount();
-}
-
-function forceStartGame() {
-    const actualPlayerCount = Object.keys(gameState.players).length;
-    if (actualPlayerCount >= MIN_PLAYERS_TO_START && !gameState.gameStarted) {
-        startBattleRoyale();
-        return true;
-    }
-    return false;
-}
-
-function startBattleRoyale() {
-    gameState.gameStarted = true;
-    gameState.alivePlayers = Object.keys(gameState.players).length;
-    gameState.playerCount = gameState.alivePlayers;
-    
-    for (const socketId of Object.keys(gameState.players)) {
-        gameState.deadPlayers[socketId] = false;
-    }
-    
-    io.emit('gameStart', { 
-        totalPlayers: gameState.alivePlayers,
+    io.to(roomId).emit('gameStart', { 
+        totalPlayers: roomState.alivePlayers,
         mode: 'battle_royale'
     });
-    emitGameStateToAll();
-    startGameLoop();
-    console.log(`Battle Royale started with ${gameState.alivePlayers} players!`);
+    emitGameStateToRoom(roomId);
+    startGameLoop(roomId);
+    console.log('Battle Royale started in room ' + roomId + ' with ' + roomState.alivePlayers + ' players!');
 }
 
-function broadcastPlayerCount() {
-    const count = Object.keys(gameState.players).length;
-    const alive = gameState.gameStarted ? gameState.alivePlayers : count;
-    io.emit('playerCount', { 
+function broadcastRoomInfo(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState) return;
+    
+    const playerList = [];
+    for (const [socketId, color] of Object.entries(roomState.players)) {
+        playerList.push({
+            socketId: socketId,
+            color: color,
+            name: roomState.playerNames[socketId] || color.toUpperCase(),
+            isHost: socketId === roomState.hostSocketId,
+            playerClass: roomState.playerClasses[socketId]
+        });
+    }
+    
+    io.to(roomId).emit('roomInfo', {
+        roomId: roomId,
+        players: playerList,
+        playerCount: Object.keys(roomState.players).length,
+        maxPlayers: MAX_PLAYERS,
+        minPlayers: MIN_PLAYERS_TO_START,
+        gameStarted: roomState.gameStarted,
+        hostSocketId: roomState.hostSocketId
+    });
+}
+
+function broadcastPlayerCount(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState) return;
+    
+    const count = Object.keys(roomState.players).length;
+    const alive = roomState.gameStarted ? roomState.alivePlayers : count;
+    io.to(roomId).emit('playerCount', { 
         current: count, 
         required: MAX_PLAYERS,
         minRequired: MIN_PLAYERS_TO_START,
         alive: alive,
-        canForceStart: count >= MIN_PLAYERS_TO_START && !gameState.gameStarted
+        canForceStart: false
     });
 }
 
-function resetGameForNewMatch() {
-    console.log('Resetting game for new match...');
-    stopGameLoop();
-    initializeGame();
-    io.emit('gameReset');
-    emitGameStateToAll();
-    broadcastPlayerCount();
+function resetRoomForNewMatch(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState) return;
+    
+    console.log('Resetting room ' + roomId + ' for new match...');
+    stopGameLoop(roomId);
+    
+    roomState.gameStarted = false;
+    roomState.winner = null;
+    roomState.alivePlayers = 0;
+    roomState.deadPlayers = {};
+    
+    initializeRoomMap(roomState);
+    
+    io.to(roomId).emit('gameReset');
+    emitGameStateToRoom(roomId);
+    broadcastRoomInfo(roomId);
 }
 
-function getVisibleCells(playerColor) {
+function cleanupRoom(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState) return;
+    
+    stopGameLoop(roomId);
+    delete rooms[roomId];
+    console.log('Room ' + roomId + ' cleaned up');
+}
+
+function getVisibleCells(roomState, playerColor) {
     const visible = new Set();
     
     for (let y = 0; y < GRID_SIZE; y++) {
         for (let x = 0; x < GRID_SIZE; x++) {
-            const cell = gameState.grid[y][x];
+            const cell = roomState.grid[y][x];
             if (cell.owner === playerColor) {
-                visible.add(`${x},${y}`);
+                visible.add(x + ',' + y);
                 const directions = [[0, 1], [0, -1], [1, 0], [-1, 0]];
                 for (const [dx, dy] of directions) {
                     const nx = x + dx;
                     const ny = y + dy;
                     if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
-                        visible.add(`${nx},${ny}`);
+                        visible.add(nx + ',' + ny);
                     }
                 }
             }
@@ -462,16 +497,16 @@ function getVisibleCells(playerColor) {
     return visible;
 }
 
-function getFilteredGameState(playerColor) {
-    const visible = getVisibleCells(playerColor);
+function getFilteredGameState(roomState, playerColor) {
+    const visible = getVisibleCells(roomState, playerColor);
     const filteredGrid = [];
     
     for (let y = 0; y < GRID_SIZE; y++) {
         filteredGrid[y] = [];
         for (let x = 0; x < GRID_SIZE; x++) {
-            const key = `${x},${y}`;
+            const key = x + ',' + y;
             if (visible.has(key)) {
-                filteredGrid[y][x] = { ...gameState.grid[y][x] };
+                filteredGrid[y][x] = { ...roomState.grid[y][x] };
             } else {
                 filteredGrid[y][x] = { isFog: true };
             }
@@ -480,35 +515,29 @@ function getFilteredGameState(playerColor) {
     
     return {
         grid: filteredGrid,
-        gameStarted: gameState.gameStarted,
-        winner: gameState.winner,
-        playerCount: gameState.playerCount
+        gameStarted: roomState.gameStarted,
+        winner: roomState.winner,
+        playerCount: roomState.playerCount
     };
 }
 
-function emitGameStateToAll() {
-    for (const [socketId, playerColor] of Object.entries(gameState.players)) {
+function emitGameStateToRoom(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState) return;
+    
+    for (const [socketId, playerColor] of Object.entries(roomState.players)) {
         const socket = io.sockets.sockets.get(socketId);
         if (socket) {
-            socket.emit('gameState', getFilteredGameState(playerColor));
+            socket.emit('gameState', getFilteredGameState(roomState, playerColor));
         }
     }
 }
 
-function getPublicGameState() {
-    return {
-        grid: gameState.grid,
-        gameStarted: gameState.gameStarted,
-        winner: gameState.winner,
-        playerCount: gameState.playerCount
-    };
-}
-
-function isValidMove(playerId, from, to) {
-    const playerColor = gameState.players[playerId];
+function isValidMove(roomState, playerId, from, to) {
+    const playerColor = roomState.players[playerId];
     if (!playerColor) return false;
 
-    const fromCell = gameState.grid[from.y]?.[from.x];
+    const fromCell = roomState.grid[from.y] && roomState.grid[from.y][from.x];
     if (!fromCell || fromCell.owner !== playerColor) return false;
 
     if (fromCell.troops <= 1) return false;
@@ -517,16 +546,20 @@ function isValidMove(playerId, from, to) {
     const dy = Math.abs(to.y - from.y);
     if (dx + dy !== 1) return false;
 
-    const toCell = gameState.grid[to.y]?.[to.x];
+    const toCell = roomState.grid[to.y] && roomState.grid[to.y][to.x];
     if (!toCell || toCell.terrain === TERRAIN.MOUNTAIN) return false;
 
     return true;
 }
 
-function executeMove(playerId, from, to, splitMove = false) {
-    const playerColor = gameState.players[playerId];
-    const fromCell = gameState.grid[from.y][from.x];
-    const toCell = gameState.grid[to.y][to.x];
+function executeMove(roomId, playerId, from, to, splitMove) {
+    splitMove = splitMove || false;
+    const roomState = rooms[roomId];
+    if (!roomState) return;
+    
+    const playerColor = roomState.players[playerId];
+    const fromCell = roomState.grid[from.y][from.x];
+    const toCell = roomState.grid[to.y][to.x];
     
     const isMovingGeneral = fromCell.unit === UNIT.GENERAL;
     
@@ -534,11 +567,9 @@ function executeMove(playerId, from, to, splitMove = false) {
     if (splitMove) {
         troopsToMove = Math.floor(fromCell.troops / 2);
         if (troopsToMove < 1) {
-            console.log(`Split move rejected: not enough troops (${fromCell.troops})`);
             return;
         }
         fromCell.troops = fromCell.troops - troopsToMove;
-        console.log(`Split move: ${troopsToMove} troops moving, ${fromCell.troops} staying`);
     } else {
         troopsToMove = fromCell.troops - 1;
         fromCell.troops = 1;
@@ -576,55 +607,61 @@ function executeMove(playerId, from, to, splitMove = false) {
     if (isMovingGeneral && moveSuccessful && toCell.owner === playerColor && !splitMove) {
         fromCell.unit = null;
         toCell.unit = UNIT.GENERAL;
-        console.log(`General moved from (${from.x},${from.y}) to (${to.x},${to.y}) for ${playerColor}`);
     }
 
     if (capturedEnemyGeneral && capturedOwner) {
-        const loserSocketId = Object.keys(gameState.players).find(
-            id => gameState.players[id] === capturedOwner
+        const loserSocketId = Object.keys(roomState.players).find(
+            id => roomState.players[id] === capturedOwner
         );
         if (loserSocketId) {
-            eliminatePlayer(loserSocketId, playerId, 'captured');
+            eliminatePlayer(roomId, loserSocketId, playerId, 'captured');
         }
     }
 
-    emitGameStateToAll();
+    emitGameStateToRoom(roomId);
 }
 
-function getPlayerNamesForBroadcast() {
+function getPlayerNamesForBroadcast(roomState) {
     const names = {};
-    for (const [socketId, color] of Object.entries(gameState.players)) {
-        names[color] = gameState.playerNames[socketId] || color.toUpperCase();
+    for (const [socketId, color] of Object.entries(roomState.players)) {
+        names[color] = roomState.playerNames[socketId] || color.toUpperCase();
     }
     return names;
 }
 
-function broadcastPlayerNames() {
-    const names = getPlayerNamesForBroadcast();
-    io.emit('playerNames', names);
+function broadcastPlayerNames(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState) return;
+    
+    const names = getPlayerNamesForBroadcast(roomState);
+    io.to(roomId).emit('playerNames', names);
 }
 
-function eliminatePlayer(loserSocketId, attackerSocketId, reason = 'captured') {
-    const loserColor = gameState.players[loserSocketId];
-    const attackerColor = attackerSocketId ? gameState.players[attackerSocketId] : null;
+function eliminatePlayer(roomId, loserSocketId, attackerSocketId, reason) {
+    reason = reason || 'captured';
+    const roomState = rooms[roomId];
+    if (!roomState) return;
     
-    console.log(`Eliminating player ${loserColor} (reason: ${reason})`);
+    const loserColor = roomState.players[loserSocketId];
+    const attackerColor = attackerSocketId ? roomState.players[attackerSocketId] : null;
     
-    gameState.deadPlayers[loserSocketId] = true;
-    gameState.alivePlayers--;
+    console.log('Eliminating player ' + loserColor + ' in room ' + roomId + ' (reason: ' + reason + ')');
+    
+    roomState.deadPlayers[loserSocketId] = true;
+    roomState.alivePlayers--;
     
     if (attackerColor && reason === 'captured') {
         let cellsTransferred = 0;
         for (let y = 0; y < GRID_SIZE; y++) {
             for (let x = 0; x < GRID_SIZE; x++) {
-                const cell = gameState.grid[y][x];
+                const cell = roomState.grid[y][x];
                 if (cell.owner === loserColor) {
                     cell.owner = attackerColor;
                     cellsTransferred++;
                 }
             }
         }
-        console.log(`Transferred ${cellsTransferred} cells from ${loserColor} to ${attackerColor}`);
+        console.log('Transferred ' + cellsTransferred + ' cells from ' + loserColor + ' to ' + attackerColor);
     }
     
     const loserSocket = io.sockets.sockets.get(loserSocketId);
@@ -632,145 +669,297 @@ function eliminatePlayer(loserSocketId, attackerSocketId, reason = 'captured') {
         loserSocket.emit('eliminated', { 
             reason: reason,
             killedBy: attackerColor,
-            placement: gameState.alivePlayers + 1
+            placement: roomState.alivePlayers + 1
         });
     }
     
-    io.emit('playerEliminated', {
+    io.to(roomId).emit('playerEliminated', {
         eliminatedColor: loserColor,
         eliminatedBy: attackerColor,
-        alivePlayers: gameState.alivePlayers
+        alivePlayers: roomState.alivePlayers
     });
     
-    checkForWinner();
+    checkForWinner(roomId);
 }
 
-function checkForWinner() {
-    if (gameState.alivePlayers === 1) {
-        const winnerSocketId = Object.keys(gameState.players).find(
-            id => !gameState.deadPlayers[id]
+function checkForWinner(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState) return;
+    
+    if (roomState.alivePlayers === 1) {
+        const winnerSocketId = Object.keys(roomState.players).find(
+            id => !roomState.deadPlayers[id]
         );
         
         if (winnerSocketId) {
-            const winnerColor = gameState.players[winnerSocketId];
-            gameState.winner = winnerColor;
+            const winnerColor = roomState.players[winnerSocketId];
+            roomState.winner = winnerColor;
             
-            io.emit('gameOver', { 
+            io.to(roomId).emit('gameOver', { 
                 winner: winnerColor,
                 reason: 'last_man_standing'
             });
             
-            console.log(`Game Over! Winner: ${winnerColor} (Last Man Standing)`);
+            console.log('Game Over in room ' + roomId + '! Winner: ' + winnerColor + ' (Last Man Standing)');
         }
-    } else if (gameState.alivePlayers === 0) {
-        gameState.winner = 'draw';
-        io.emit('gameOver', { winner: null, reason: 'draw' });
-        console.log('Game Over! Draw - no survivors');
+    } else if (roomState.alivePlayers === 0) {
+        roomState.winner = 'draw';
+        io.to(roomId).emit('gameOver', { winner: null, reason: 'draw' });
+        console.log('Game Over in room ' + roomId + '! Draw - no survivors');
+    }
+}
+
+function promoteNewHost(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState) return;
+    
+    const remainingPlayers = Object.keys(roomState.players);
+    if (remainingPlayers.length > 0) {
+        roomState.hostSocketId = remainingPlayers[0];
+        console.log('New host promoted in room ' + roomId + ': ' + roomState.hostSocketId);
+        broadcastRoomInfo(roomId);
     }
 }
 
 io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
 
-    const playerClass = socket.handshake.query.playerClass || 'rusher';
-    const nickname = socket.handshake.query.nickname || null;
-    console.log(`Player ${socket.id} selected class: ${playerClass}, nickname: ${nickname || 'none'}`);
-
-    const actualPlayerCount = Object.keys(gameState.players).length;
-    if (actualPlayerCount >= MAX_PLAYERS || gameState.gameStarted) {
-        console.log(`Game full or in progress. Rejecting player ${socket.id}`);
-        socket.emit('gameFull');
-        socket.disconnect();
-        return;
-    }
-
-    const usedColors = Object.values(gameState.players);
-    const playerColor = PLAYER_COLORS.find(color => !usedColors.includes(color));
-    
-    if (!playerColor) {
-        console.log(`No available colors. Rejecting player ${socket.id}`);
-        socket.emit('gameFull');
-        socket.disconnect();
-        return;
-    }
-
-    const playerNumber = Object.keys(gameState.players).length + 1;
-    const defaultName = `General ${playerNumber}`;
-    
-    gameState.players[socket.id] = playerColor;
-    gameState.playerClasses[socket.id] = playerClass;
-    gameState.playerNames[socket.id] = nickname || defaultName;
-    gameState.playerColors[socket.id] = playerColor;
-    gameState.playerCount = Object.keys(gameState.players).length;
-
-    if (playerClass === 'rusher') {
-        for (let y = 0; y < GRID_SIZE; y++) {
-            for (let x = 0; x < GRID_SIZE; x++) {
-                const cell = gameState.grid[y][x];
-                if (cell.unit === UNIT.GENERAL && cell.owner === playerColor) {
-                    cell.troops = 30;
-                    console.log(`Rusher bonus applied: ${playerColor} general now has 30 troops`);
+    socket.on('createRoom', (data) => {
+        const nickname = data.nickname;
+        const playerClass = data.playerClass;
+        
+        if (socketToRoom[socket.id]) {
+            socket.emit('error', { message: 'Already in a room' });
+            return;
+        }
+        
+        const roomId = generateRoomId();
+        rooms[roomId] = createRoomState(socket.id);
+        const roomState = rooms[roomId];
+        
+        initializeRoomMap(roomState);
+        
+        socketToRoom[socket.id] = roomId;
+        socket.join(roomId);
+        
+        const usedColors = Object.values(roomState.players);
+        const playerColor = PLAYER_COLORS.find(color => !usedColors.includes(color));
+        
+        roomState.players[socket.id] = playerColor;
+        roomState.playerClasses[socket.id] = playerClass || 'rusher';
+        roomState.playerNames[socket.id] = nickname || 'General 1';
+        roomState.playerColors[socket.id] = playerColor;
+        roomState.playerCount = 1;
+        
+        if (roomState.playerClasses[socket.id] === 'rusher') {
+            for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    const cell = roomState.grid[y][x];
+                    if (cell.unit === UNIT.GENERAL && cell.owner === playerColor) {
+                        cell.troops = 30;
+                    }
                 }
             }
         }
-    }
-
-    socket.emit('playerAssigned', { color: playerColor, playerClass: playerClass });
-    console.log(`Player ${socket.id} assigned color: ${playerColor}, total players: ${gameState.playerCount}`);
-
-    socket.emit('gameState', getFilteredGameState(playerColor));
-    broadcastPlayerNames();
-    checkAndStartGame();
-
-    socket.on('move', (data) => {
-        if (!gameState.gameStarted || gameState.winner) return;
-        if (gameState.deadPlayers[socket.id]) return;
-
-        const { from, to, splitMove } = data;
-        if (isValidMove(socket.id, from, to)) {
-            executeMove(socket.id, from, to, splitMove || false);
-        }
+        
+        socket.emit('roomCreated', { roomId: roomId });
+        socket.emit('playerAssigned', { color: playerColor, playerClass: roomState.playerClasses[socket.id], isHost: true });
+        socket.emit('gameState', getFilteredGameState(roomState, playerColor));
+        broadcastRoomInfo(roomId);
+        broadcastPlayerNames(roomId);
+        
+        console.log('Room ' + roomId + ' created by ' + socket.id + ' (' + nickname + ')');
     });
 
-    socket.on('forceStart', () => {
-        console.log(`Player ${socket.id} requested force start`);
-        if (forceStartGame()) {
-            console.log('Force start successful');
+    socket.on('joinRoom', (data) => {
+        const roomId = data.roomId;
+        const nickname = data.nickname;
+        const playerClass = data.playerClass;
+        const upperRoomId = roomId.toUpperCase();
+        
+        if (socketToRoom[socket.id]) {
+            socket.emit('error', { message: 'Already in a room' });
+            return;
+        }
+        
+        if (!rooms[upperRoomId]) {
+            socket.emit('error', { message: 'Room not found' });
+            return;
+        }
+        
+        const roomState = rooms[upperRoomId];
+        
+        if (roomState.gameStarted) {
+            socket.emit('error', { message: 'Game already in progress' });
+            return;
+        }
+        
+        const playerCount = Object.keys(roomState.players).length;
+        if (playerCount >= MAX_PLAYERS) {
+            socket.emit('error', { message: 'Room is full' });
+            return;
+        }
+        
+        socketToRoom[socket.id] = upperRoomId;
+        socket.join(upperRoomId);
+        
+        const usedColors = Object.values(roomState.players);
+        const playerColor = PLAYER_COLORS.find(color => !usedColors.includes(color));
+        
+        const playerNumber = Object.keys(roomState.players).length + 1;
+        roomState.players[socket.id] = playerColor;
+        roomState.playerClasses[socket.id] = playerClass || 'rusher';
+        roomState.playerNames[socket.id] = nickname || ('General ' + playerNumber);
+        roomState.playerColors[socket.id] = playerColor;
+        roomState.playerCount = Object.keys(roomState.players).length;
+        
+        if (roomState.playerClasses[socket.id] === 'rusher') {
+            for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    const cell = roomState.grid[y][x];
+                    if (cell.unit === UNIT.GENERAL && cell.owner === playerColor) {
+                        cell.troops = 30;
+                    }
+                }
+            }
+        }
+        
+        socket.emit('roomJoined', { roomId: upperRoomId });
+        socket.emit('playerAssigned', { 
+            color: playerColor, 
+            playerClass: roomState.playerClasses[socket.id], 
+            isHost: socket.id === roomState.hostSocketId 
+        });
+        socket.emit('gameState', getFilteredGameState(roomState, playerColor));
+        broadcastRoomInfo(upperRoomId);
+        broadcastPlayerNames(upperRoomId);
+        
+        console.log('Player ' + socket.id + ' (' + nickname + ') joined room ' + upperRoomId);
+    });
+
+    socket.on('hostStartGame', () => {
+        const roomId = getRoomIdBySocketId(socket.id);
+        if (!roomId) return;
+        
+        const roomState = rooms[roomId];
+        if (!roomState) return;
+        
+        if (socket.id !== roomState.hostSocketId) {
+            socket.emit('error', { message: 'Only the host can start the game' });
+            return;
+        }
+        
+        const playerCount = Object.keys(roomState.players).length;
+        if (playerCount < MIN_PLAYERS_TO_START) {
+            socket.emit('error', { message: 'Need at least ' + MIN_PLAYERS_TO_START + ' players to start' });
+            return;
+        }
+        
+        if (roomState.gameStarted) {
+            socket.emit('error', { message: 'Game already started' });
+            return;
+        }
+        
+        startBattleRoyale(roomId);
+        console.log('Host ' + socket.id + ' started game in room ' + roomId);
+    });
+
+    socket.on('move', (data) => {
+        const roomId = getRoomIdBySocketId(socket.id);
+        if (!roomId) return;
+        
+        const roomState = rooms[roomId];
+        if (!roomState || !roomState.gameStarted || roomState.winner) return;
+        if (roomState.deadPlayers[socket.id]) return;
+
+        const from = data.from;
+        const to = data.to;
+        const splitMove = data.splitMove;
+        if (isValidMove(roomState, socket.id, from, to)) {
+            executeMove(roomId, socket.id, from, to, splitMove || false);
         }
     });
 
     socket.on('disconnect', () => {
         console.log('Player disconnected:', socket.id);
-        const disconnectedColor = gameState.players[socket.id];
+        const roomId = getRoomIdBySocketId(socket.id);
         
-        if (gameState.gameStarted && !gameState.deadPlayers[socket.id]) {
-            eliminatePlayer(socket.id, null, 'disconnect');
-        }
-        
-        delete gameState.players[socket.id];
-        delete gameState.playerClasses[socket.id];
-        delete gameState.playerNames[socket.id];
-        delete gameState.playerColors[socket.id];
-        delete gameState.deadPlayers[socket.id];
-        gameState.playerCount = Object.keys(gameState.players).length;
-
-        console.log(`Player count after disconnect: ${gameState.playerCount}, gameStarted: ${gameState.gameStarted}`);
-
-        if (!gameState.gameStarted) {
-            broadcastPlayerCount();
+        if (roomId) {
+            const roomState = rooms[roomId];
+            
+            if (roomState) {
+                if (roomState.gameStarted && !roomState.deadPlayers[socket.id]) {
+                    eliminatePlayer(roomId, socket.id, null, 'disconnect');
+                }
+                
+                delete roomState.players[socket.id];
+                delete roomState.playerClasses[socket.id];
+                delete roomState.playerNames[socket.id];
+                delete roomState.playerColors[socket.id];
+                delete roomState.deadPlayers[socket.id];
+                roomState.playerCount = Object.keys(roomState.players).length;
+                
+                if (Object.keys(roomState.players).length === 0) {
+                    cleanupRoom(roomId);
+                } else {
+                    if (socket.id === roomState.hostSocketId) {
+                        promoteNewHost(roomId);
+                    }
+                    
+                    if (!roomState.gameStarted) {
+                        broadcastRoomInfo(roomId);
+                        broadcastPlayerNames(roomId);
+                    }
+                }
+            }
+            
+            delete socketToRoom[socket.id];
         }
     });
 
     socket.on('requestReset', () => {
-        if (gameState.winner || !gameState.gameStarted) {
-            resetGameForNewMatch();
+        const roomId = getRoomIdBySocketId(socket.id);
+        if (!roomId) return;
+        
+        const roomState = rooms[roomId];
+        if (!roomState) return;
+        
+        if (roomState.winner || !roomState.gameStarted) {
+            resetRoomForNewMatch(roomId);
         }
+    });
+
+    socket.on('leaveRoom', () => {
+        const roomId = getRoomIdBySocketId(socket.id);
+        if (!roomId) return;
+        
+        const roomState = rooms[roomId];
+        if (roomState) {
+            delete roomState.players[socket.id];
+            delete roomState.playerClasses[socket.id];
+            delete roomState.playerNames[socket.id];
+            delete roomState.playerColors[socket.id];
+            roomState.playerCount = Object.keys(roomState.players).length;
+            
+            socket.leave(roomId);
+            
+            if (Object.keys(roomState.players).length === 0) {
+                cleanupRoom(roomId);
+            } else {
+                if (socket.id === roomState.hostSocketId) {
+                    promoteNewHost(roomId);
+                }
+                broadcastRoomInfo(roomId);
+                broadcastPlayerNames(roomId);
+            }
+        }
+        
+        delete socketToRoom[socket.id];
+        socket.emit('leftRoom');
     });
 });
 
-initializeGame();
-
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`GridLords server running on port ${PORT}`);
+    console.log('GridLords server running on port ' + PORT);
 });
