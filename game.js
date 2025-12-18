@@ -29,13 +29,18 @@ const COLORS = {
     selected: '#f1c40f',
     selectedSplit: '#e67e22',
     general: '#ffd700',
-    fog: '#0a0a0a'
+    fog: '#0a0a0a',
+    outpost: '#4a5568',
+    outpostRed: '#c0392b',
+    outpostBlue: '#2980b9',
+    outpostBorder: '#a0aec0'
 };
 
 const TERRAIN = {
     EMPTY: 0,
     MOUNTAIN: 1,
-    GENERAL: 2
+    GENERAL: 2,
+    OUTPOST: 3
 };
 
 let socket;
@@ -163,10 +168,24 @@ function render() {
 
             if (cell.terrain === TERRAIN.MOUNTAIN) {
                 fillColor = COLORS.mountain;
+            } else if (cell.terrain === TERRAIN.OUTPOST && !cell.owner) {
+                fillColor = COLORS.outpost;
             } else if (cell.owner === 'red') {
-                fillColor = cell.terrain === TERRAIN.GENERAL ? '#c0392b' : COLORS.red;
+                if (cell.terrain === TERRAIN.GENERAL) {
+                    fillColor = '#c0392b';
+                } else if (cell.terrain === TERRAIN.OUTPOST) {
+                    fillColor = COLORS.outpostRed;
+                } else {
+                    fillColor = COLORS.red;
+                }
             } else if (cell.owner === 'blue') {
-                fillColor = cell.terrain === TERRAIN.GENERAL ? '#2980b9' : COLORS.blue;
+                if (cell.terrain === TERRAIN.GENERAL) {
+                    fillColor = '#2980b9';
+                } else if (cell.terrain === TERRAIN.OUTPOST) {
+                    fillColor = COLORS.outpostBlue;
+                } else {
+                    fillColor = COLORS.blue;
+                }
             }
 
             ctx.fillStyle = fillColor;
@@ -183,6 +202,18 @@ function render() {
                 ctx.fillText('👑', px + CELL_SIZE / 2, py + 2);
             }
 
+            if (cell.terrain === TERRAIN.OUTPOST) {
+                ctx.strokeStyle = COLORS.outpostBorder;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillStyle = COLORS.text;
+                ctx.fillText('♖', px + CELL_SIZE / 2, py + 2);
+            }
+
             if (selectedCell && selectedCell.x === x && selectedCell.y === y) {
                 ctx.strokeStyle = isSplitMove ? COLORS.selectedSplit : COLORS.selected;
                 ctx.lineWidth = 3;
@@ -197,8 +228,9 @@ function render() {
                 ctx.fillStyle = COLORS.text;
                 ctx.font = 'bold 11px Arial';
                 ctx.textAlign = 'center';
-                ctx.textBaseline = cell.terrain === TERRAIN.GENERAL ? 'bottom' : 'middle';
-                const textY = cell.terrain === TERRAIN.GENERAL ? py + CELL_SIZE - 3 : py + CELL_SIZE / 2;
+                const hasTopIcon = cell.terrain === TERRAIN.GENERAL || cell.terrain === TERRAIN.OUTPOST;
+                ctx.textBaseline = hasTopIcon ? 'bottom' : 'middle';
+                const textY = hasTopIcon ? py + CELL_SIZE - 3 : py + CELL_SIZE / 2;
                 ctx.fillText(cell.troops.toString(), px + CELL_SIZE / 2, textY);
             }
 
