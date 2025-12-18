@@ -13,8 +13,21 @@ const gameOverMessage = document.getElementById('game-over-message');
 const playAgainBtn = document.getElementById('play-again-btn');
 const loginOverlay = document.getElementById('login-overlay');
 const nicknameInput = document.getElementById('nicknameInput');
-const joinBtn = document.getElementById('joinBtn');
 const matchInfoEl = document.getElementById('match-info');
+
+// Room UI elements
+const createRoomBtn = document.getElementById('createRoomBtn');
+const roomCodeInput = document.getElementById('roomCodeInput');
+const joinRoomBtn = document.getElementById('joinRoomBtn');
+const lobbyOverlay = document.getElementById('lobby-overlay');
+const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+const lobbyPlayerCount = document.getElementById('lobbyPlayerCount');
+const lobbyPlayerList = document.getElementById('lobbyPlayerList');
+const startGameBtn = document.getElementById('startGameBtn');
+const waitingMessage = document.getElementById('waitingMessage');
+const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+const roomInfoEl = document.getElementById('room-info');
+const currentRoomCodeEl = document.getElementById('currentRoomCode');
 
 const GRID_SIZE = 30;
 const CELL_SIZE = 20;
@@ -96,26 +109,41 @@ let isSplitMove = false;
 let playerNickname = null;
 let playerNames = {};
 
+// Room state
+let currentRoomId = null;
+let isHost = false;
+let pendingAction = null; // 'create' or 'join'
+
 function connectToServer(selectedClass) {
     playerClass = selectedClass;
 
-    socket = io('https://gridlords.onrender.com', {
-                transports: ['websocket'], 
-                upgrade: false,
-                timeout: 2000,
-                query: { playerClass: selectedClass, nickname: playerNickname }
+    socket = io(window.location.origin, {
+        transports: ['websocket'], 
+        upgrade: false,
+        timeout: 5000
     });
 
     socket.on('connect', () => {
         console.log('Socket connected:', socket.id);
-        statusEl.textContent = 'Connected! Waiting for opponent...';
-        statusEl.style.background = '#27ae60';
+        
+        // Execute pending action after connection
+        if (pendingAction === 'create') {
+            socket.emit('createRoom', { nickname: playerNickname, playerClass: playerClass });
+        } else if (pendingAction === 'join') {
+            const roomCode = roomCodeInput.value.trim().toUpperCase();
+            socket.emit('joinRoom', { roomId: roomCode, nickname: playerNickname, playerClass: playerClass });
+        }
+        pendingAction = null;
     });
 
     socket.on('connect_error', (err) => {
         console.error('Connection error:', err.message);
         statusEl.textContent = 'Connection error: ' + err.message;
         statusEl.style.background = '#e74c3c';
+        // Show login overlay again on error
+        loginOverlay.classList.remove('hidden');
+        lobbyOverlay.classList.add('hidden');
+        classModal.classList.add('hidden');
     });
 
     socket.on('disconnect', (reason) => {
@@ -124,24 +152,128 @@ function connectToServer(selectedClass) {
         statusEl.style.background = '#e74c3c';
     });
 
+    socket.on('error', (data) => {
+        console.error('Server error:', data.message);
+        alert(data.message);
+        // Return to login if not in a room
+        if (!currentRoomId) {
+            loginOverlay.classList.remove('hidden');
+            lobbyOverlay.classList.add('hidden');
+            classModal.classList.add('hidden');
+        }
+    });
+
+    // Room events
+    socket.on('roomCreated', (data) => {
+        currentRoomId = data.roomId;
+        isHost = true;
+        roomCodeDisplay.textContent = data.roomId;
+        currentRoomCodeEl.textContent = data.roomId;
+        
+        classModal.classList.add('hidden');
+        lobbyOverlay.classList.remove('hidden');
+        
+        // Show start button for host
+        startGameBtn.classList.remove('hidden');
+        startGameBtn.disabled = true; // Disabled until min players
+        waitingMessage.textContent = 'Esperando mas jugadores...';
+        
+        console.log('Room created:', data.roomId);
+    });
+
+    socket.on('roomJoined', (data) => {
+        currentRoomId = data.roomId;
+        roomCodeDisplay.textContent = data.roomId;
+        currentRoomCodeEl.textContent = data.roomId;
+        
+        classModal.classList.add('hidden');
+        lobbyOverlay.classList.remove('hidden');
+        
+        console.log('Joined room:', data.roomId);
+    });
+
+    socket.on('roomInfo', (data) => {
+        currentRoomId = data.roomId;
+        isHost = socket.id === data.hostSocketId;
+        
+        // Update player count
+        lobbyPlayerCount.textContent = data.playerCount + '/' + data.maxPlayers;
+        
+        // Update player list
+        lobbyPlayerList.innerHTML = '';
+        data.players.forEach(player => {
+            const li = document.createElement('li');
+            li.className = player.isHost ? 'host' : '';
+            
+            const colorDot = document.createElement('span');
+            colorDot.className = 'player-color';
+            colorDot.style.backgroundColor = COLORS[player.color] || '#888';
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = player.name;
+            nameSpan.style.color = COLORS[player.color] || '#fff';
+            
+            const leftDiv = document.createElement('div');
+            leftDiv.appendChild(colorDot);
+            leftDiv.appendChild(nameSpan);
+            
+            li.appendChild(leftDiv);
+            
+            if (player.isHost) {
+                const hostBadge = document.createElement('span');
+                hostBadge.className = 'host-badge';
+                hostBadge.textContent = 'HOST';
+                li.appendChild(hostBadge);
+            }
+            
+            lobbyPlayerList.appendChild(li);
+        });
+        
+        // Update host controls
+        if (isHost) {
+            startGameBtn.classList.remove('hidden');
+            startGameBtn.disabled = data.playerCount < data.minPlayers;
+            waitingMessage.textContent = data.playerCount < data.minPlayers 
+                ? 'Necesitas al menos ' + data.minPlayers + ' jugadores para iniciar'
+                : 'Listo para iniciar!';
+            waitingMessage.classList.remove('hidden');
+        } else {
+            startGameBtn.classList.add('hidden');
+            waitingMessage.textContent = 'Esperando al host para iniciar...';
+            waitingMessage.classList.remove('hidden');
+        }
+    });
+
+    socket.on('leftRoom', () => {
+        currentRoomId = null;
+        isHost = false;
+        gameState = null;
+        playerColor = null;
+        gameStarted = false;
+        
+        lobbyOverlay.classList.add('hidden');
+        loginOverlay.classList.remove('hidden');
+        roomInfoEl.classList.add('hidden');
+    });
+
     socket.on('playerAssigned', (data) => {
         playerColor = data.color;
+        isHost = data.isHost;
         const classLabel = playerClass === 'tank' ? 'Tank' : 'Rusher';
         const classIcon = playerClass === 'tank' ? '🛡️' : '⚡';
-        playerInfoEl.textContent = `You are: ${playerColor.toUpperCase()} ${classIcon} ${classLabel}`;
+        playerInfoEl.textContent = 'You are: ' + playerColor.toUpperCase() + ' ' + classIcon + ' ' + classLabel;
         playerInfoEl.className = playerColor;
     });
 
-    socket.on('gameFull', () => {
-        statusEl.textContent = 'Game is full! Try again later.';
-        statusEl.style.background = '#e74c3c';
-    });
-
-    socket.on('gameStart', () => {
+    socket.on('gameStart', (data) => {
         gameStarted = true;
+        lobbyOverlay.classList.add('hidden');
+        roomInfoEl.classList.remove('hidden');
         statusEl.textContent = 'Game Started! Your turn to conquer!';
         statusEl.style.background = '#9b59b6';
         resetBtn.style.display = 'none';
+        
+        console.log('Battle Royale started with', data.totalPlayers, 'players');
     });
 
     socket.on('gameState', (state) => {
@@ -158,7 +290,7 @@ function connectToServer(selectedClass) {
         gameOverOverlay.classList.add(isWinner ? 'victory' : 'defeat');
         
         if (data.reason === 'last_man_standing') {
-            gameOverTitle.textContent = isWinner ? 'VICTORIA!' : `VICTORIA DE ${winnerName}!`;
+            gameOverTitle.textContent = isWinner ? 'VICTORIA!' : 'VICTORIA DE ' + winnerName + '!';
             gameOverMessage.textContent = isWinner ? 'Eres el ultimo superviviente! Conquistaste todos los reinos!' : 'El juego ha terminado.';
         } else if (data.reason === 'disconnect') {
             gameOverTitle.textContent = isWinner ? 'VICTORIA!' : 'DERROTA...';
@@ -167,7 +299,7 @@ function connectToServer(selectedClass) {
             gameOverTitle.textContent = 'EMPATE';
             gameOverMessage.textContent = 'No quedan supervivientes!';
         } else {
-            gameOverTitle.textContent = `VICTORIA DE ${winnerName}!`;
+            gameOverTitle.textContent = 'VICTORIA DE ' + winnerName + '!';
             gameOverMessage.textContent = isWinner ? 'Capturaste al General enemigo!' : 'Tu General fue capturado!';
         }
         
@@ -184,25 +316,21 @@ function connectToServer(selectedClass) {
         statusEl.style.background = '#f39c12';
         resetBtn.style.display = 'none';
         gameOverOverlay.classList.add('hidden');
+        
+        // Show lobby again
+        lobbyOverlay.classList.remove('hidden');
+        roomInfoEl.classList.add('hidden');
     });
 
     socket.on('playerCount', (data) => {
-        const { current, required, minRequired, canForceStart, alive } = data;
+        const { current, required, alive } = data;
         
         if (gameStarted) {
-            playerCounterEl.textContent = `Jugadores vivos: ${alive}`;
-            playerCounterEl.style.color = '#27ae60';
-        } else if (current === required) {
-            playerCounterEl.textContent = `Jugadores: ${current}/${required} - Iniciando...`;
+            playerCounterEl.textContent = 'Jugadores vivos: ' + alive;
             playerCounterEl.style.color = '#27ae60';
         } else {
-            playerCounterEl.textContent = `Jugadores: ${current}/${required}`;
+            playerCounterEl.textContent = 'Jugadores: ' + current + '/' + required;
             playerCounterEl.style.color = '#f39c12';
-        }
-        
-        const forceStartBtn = document.getElementById('forceStartBtn');
-        if (forceStartBtn) {
-            forceStartBtn.style.display = canForceStart ? 'inline-block' : 'none';
         }
     });
 
@@ -212,7 +340,7 @@ function connectToServer(selectedClass) {
     });
 
     socket.on('eliminated', (data) => {
-        console.log(`%c☠️ ELIMINADO! %cPosicion: #${data.placement}`, 
+        console.log('%c☠️ ELIMINADO! %cPosicion: #' + data.placement, 
             'background: #e74c3c; color: white; font-weight: bold; padding: 2px 6px; border-radius: 3px;',
             'color: #e74c3c; font-weight: bold;'
         );
@@ -220,8 +348,8 @@ function connectToServer(selectedClass) {
         gameOverOverlay.classList.remove('hidden', 'victory', 'defeat');
         gameOverOverlay.classList.add('defeat');
         gameOverTitle.textContent = 'ELIMINADO';
-        gameOverMessage.textContent = `Quedaste en posicion #${data.placement}. ${data.killedBy ? playerNames[data.killedBy] + ' absorbio tu reino!' : 'Te desconectaste.'}`;
-        statusEl.textContent = `Eliminado - #${data.placement}`;
+        gameOverMessage.textContent = 'Quedaste en posicion #' + data.placement + '. ' + (data.killedBy ? playerNames[data.killedBy] + ' absorbio tu reino!' : 'Te desconectaste.');
+        statusEl.textContent = 'Eliminado - #' + data.placement;
         statusEl.style.background = '#e74c3c';
     });
 
@@ -229,18 +357,18 @@ function connectToServer(selectedClass) {
         const eliminatedName = playerNames[data.eliminatedColor] || data.eliminatedColor.toUpperCase();
         const killerName = data.eliminatedBy ? (playerNames[data.eliminatedBy] || data.eliminatedBy.toUpperCase()) : 'Desconexion';
         
-        console.log(`%c⚔️ ELIMINACION! %c${eliminatedName} fue eliminado por ${killerName}. Quedan ${data.alivePlayers} jugadores.`, 
+        console.log('%c⚔️ ELIMINACION! %c' + eliminatedName + ' fue eliminado por ' + killerName + '. Quedan ' + data.alivePlayers + ' jugadores.', 
             'background: #9b59b6; color: white; font-weight: bold; padding: 2px 6px; border-radius: 3px;',
             'color: #9b59b6; font-weight: bold;'
         );
         
-        statusEl.textContent = `${eliminatedName} eliminado! Quedan ${data.alivePlayers}`;
+        statusEl.textContent = eliminatedName + ' eliminado! Quedan ' + data.alivePlayers;
         statusEl.style.background = '#9b59b6';
     });
 
     socket.on('artilleryFire', (data) => {
         const ownerLabel = data.artilleryOwner === 'neutral' ? 'NEUTRAL' : data.artilleryOwner.toUpperCase();
-        console.log(`%c💣 ARTILLERY FIRE! %c${ownerLabel} artillery at (${data.from.x},${data.from.y}) hit ${data.targetOwner.toUpperCase()} at (${data.to.nx},${data.to.ny}) for ${data.damage} damage!`, 
+        console.log('%c💣 ARTILLERY FIRE! %c' + ownerLabel + ' artillery at (' + data.from.x + ',' + data.from.y + ') hit ' + data.targetOwner.toUpperCase() + ' at (' + data.to.nx + ',' + data.to.ny + ') for ' + data.damage + ' damage!', 
             'background: #ff8c00; color: white; font-weight: bold; padding: 2px 6px; border-radius: 3px;',
             'color: #ff8c00; font-weight: bold;'
         );
@@ -477,17 +605,55 @@ resetBtn.addEventListener('click', () => {
     socket.emit('requestReset');
 });
 
-// Login overlay event handlers
-joinBtn.addEventListener('click', () => {
+// Room creation/joining event handlers
+createRoomBtn.addEventListener('click', () => {
     const nickname = nicknameInput.value.trim();
-    playerNickname = nickname || null;
+    if (!nickname) {
+        alert('Por favor ingresa un nickname');
+        nicknameInput.focus();
+        return;
+    }
+    playerNickname = nickname;
+    pendingAction = 'create';
     loginOverlay.classList.add('hidden');
     classModal.classList.remove('hidden');
 });
 
+joinRoomBtn.addEventListener('click', () => {
+    const nickname = nicknameInput.value.trim();
+    const roomCode = roomCodeInput.value.trim().toUpperCase();
+    
+    if (!nickname) {
+        alert('Por favor ingresa un nickname');
+        nicknameInput.focus();
+        return;
+    }
+    if (!roomCode || roomCode.length !== 4) {
+        alert('Por favor ingresa un codigo de sala valido (4 letras)');
+        roomCodeInput.focus();
+        return;
+    }
+    
+    playerNickname = nickname;
+    pendingAction = 'join';
+    loginOverlay.classList.add('hidden');
+    classModal.classList.remove('hidden');
+});
+
+roomCodeInput.addEventListener('input', (event) => {
+    // Auto-uppercase and limit to 4 characters
+    event.target.value = event.target.value.toUpperCase().slice(0, 4);
+});
+
+roomCodeInput.addEventListener('keypress', (event) => {
+    if (event.key === 'Enter') {
+        joinRoomBtn.click();
+    }
+});
+
 nicknameInput.addEventListener('keypress', (event) => {
     if (event.key === 'Enter') {
-        joinBtn.click();
+        createRoomBtn.click();
     }
 });
 
@@ -504,17 +670,22 @@ rusherBtn.addEventListener('click', () => {
     connectToServer('rusher');
 });
 
-playAgainBtn.addEventListener('click', () => {
-    if (socket) {
-        socket.emit('requestReset');
+// Lobby event handlers
+startGameBtn.addEventListener('click', () => {
+    if (socket && isHost) {
+        socket.emit('hostStartGame');
     }
 });
 
-const forceStartBtn = document.getElementById('forceStartBtn');
-forceStartBtn.addEventListener('click', () => {
+leaveRoomBtn.addEventListener('click', () => {
     if (socket) {
-        socket.emit('forceStart');
-        forceStartBtn.style.display = 'none';
+        socket.emit('leaveRoom');
+    }
+});
+
+playAgainBtn.addEventListener('click', () => {
+    if (socket) {
+        socket.emit('requestReset');
     }
 });
 

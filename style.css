@@ -407,6 +407,275 @@ body {
     transform: scale(0.98);
 }
 
+/* Room Options */
+.room-options {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.room-btn {
+    padding: 15px 40px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    border: none;
+    border-radius: 25px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    min-width: 200px;
+}
+
+.room-btn.create-btn {
+    background: linear-gradient(135deg, #27ae60 0%, #1e8449 100%);
+    color: white;
+}
+
+.room-btn.create-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 25px rgba(39, 174, 96, 0.5);
+}
+
+.room-btn.join-btn {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+    min-width: 100px;
+    padding: 12px 25px;
+}
+
+.room-btn.join-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 25px rgba(52, 152, 219, 0.5);
+}
+
+.room-divider {
+    color: #666;
+    font-size: 1rem;
+    text-transform: uppercase;
+}
+
+.join-room-section {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.room-code-input {
+    width: 120px;
+    padding: 12px 15px;
+    font-size: 1.2rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid #444;
+    border-radius: 10px;
+    color: #fff;
+    text-align: center;
+    text-transform: uppercase;
+    outline: none;
+    transition: all 0.3s ease;
+    letter-spacing: 3px;
+}
+
+.room-code-input::placeholder {
+    color: #666;
+    letter-spacing: 0;
+    font-size: 0.9rem;
+}
+
+.room-code-input:focus {
+    border-color: #3498db;
+    box-shadow: 0 0 20px rgba(52, 152, 219, 0.3);
+}
+
+/* Lobby Overlay */
+.lobby-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #0f0f1a 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 4500;
+}
+
+.lobby-overlay.hidden {
+    display: none;
+}
+
+.lobby-content {
+    text-align: center;
+    padding: 40px 60px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 20px;
+    border: 2px solid #27ae60;
+    box-shadow: 0 0 60px rgba(39, 174, 96, 0.3);
+    animation: scaleIn 0.5s ease;
+    min-width: 400px;
+}
+
+.lobby-title {
+    font-size: 2rem;
+    color: #27ae60;
+    margin-bottom: 5px;
+    text-shadow: 0 0 20px rgba(39, 174, 96, 0.5);
+}
+
+.lobby-title span {
+    color: #fff;
+    letter-spacing: 5px;
+    font-family: monospace;
+    font-size: 2.5rem;
+}
+
+.lobby-subtitle {
+    color: #888;
+    margin-bottom: 30px;
+    font-size: 0.9rem;
+}
+
+.lobby-players {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 15px;
+    padding: 20px;
+    margin-bottom: 25px;
+}
+
+.lobby-players h3 {
+    color: #fff;
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+}
+
+.lobby-players h3 span {
+    color: #27ae60;
+}
+
+#lobbyPlayerList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#lobbyPlayerList li {
+    padding: 10px 15px;
+    margin: 5px 0;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#lobbyPlayerList li.host {
+    border: 1px solid #f1c40f;
+}
+
+#lobbyPlayerList li .player-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 10px;
+}
+
+#lobbyPlayerList li .host-badge {
+    background: #f1c40f;
+    color: #000;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: bold;
+}
+
+.lobby-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+}
+
+.start-game-btn {
+    padding: 15px 50px;
+    font-size: 1.3rem;
+    font-weight: bold;
+    background: linear-gradient(135deg, #e94560 0%, #c0392b 100%);
+    color: white;
+    border: none;
+    border-radius: 30px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+}
+
+.start-game-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(233, 69, 96, 0.6);
+}
+
+.start-game-btn:disabled {
+    background: #666;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.start-game-btn.hidden {
+    display: none;
+}
+
+.waiting-message {
+    color: #888;
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+.waiting-message.hidden {
+    display: none;
+}
+
+.leave-room-btn {
+    padding: 10px 25px;
+    font-size: 0.9rem;
+    background: transparent;
+    color: #888;
+    border: 1px solid #444;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.leave-room-btn:hover {
+    color: #e74c3c;
+    border-color: #e74c3c;
+}
+
+/* Room Info in Header */
+.room-info {
+    font-size: 1rem;
+    color: #27ae60;
+    background: rgba(39, 174, 96, 0.2);
+    padding: 5px 15px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    display: inline-block;
+}
+
+.room-info.hidden {
+    display: none;
+}
+
+.room-info span {
+    color: #fff;
+    font-family: monospace;
+    letter-spacing: 2px;
+}
+
 /* HUD Player Names */
 #match-info {
     font-size: 1.1rem;
