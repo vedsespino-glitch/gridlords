@@ -27,12 +27,18 @@ const TICK_INTERVAL = 1000;
 const MOUNTAIN_DENSITY = 0.15;
 
 let gameLoopInterval = null;
+let artilleryLoopInterval = null;
 
 const TERRAIN = {
     EMPTY: 0,
     MOUNTAIN: 1,
-    GENERAL: 2,
-    OUTPOST: 3
+    OUTPOST: 2,
+    ARTILLERY: 3
+};
+
+const UNIT = {
+    NONE: null,
+    GENERAL: 'general'
 };
 
 const OUTPOST_CONFIG = {
@@ -41,6 +47,15 @@ const OUTPOST_CONFIG = {
     INITIAL_TROOPS: 10,
     MIN_DISTANCE_FROM_SPAWN: 5,
     TROOP_PRODUCTION: 1
+};
+
+const ARTILLERY_CONFIG = {
+    MIN_COUNT: 2,
+    MAX_COUNT: 3,
+    INITIAL_TROOPS: 15,
+    MIN_DISTANCE_FROM_SPAWN: 6,
+    FIRE_INTERVAL: 2000,
+    DAMAGE: 3
 };
 
 let gameState = {
@@ -127,7 +142,8 @@ function generateOutposts(redSpawn, blueSpawn) {
             gameState.grid[y][x] = {
                 terrain: TERRAIN.OUTPOST,
                 owner: null,
-                troops: OUTPOST_CONFIG.INITIAL_TROOPS
+                troops: OUTPOST_CONFIG.INITIAL_TROOPS,
+                unit: null
             };
             outposts.push({ x, y });
             placed = true;
@@ -138,7 +154,54 @@ function generateOutposts(redSpawn, blueSpawn) {
     return outposts;
 }
 
-function initializeGame() {
+function generateArtillery(redSpawn, blueSpawn, existingStructures) {
+    const artilleryCount = ARTILLERY_CONFIG.MIN_COUNT + Math.floor(Math.random() * (ARTILLERY_CONFIG.MAX_COUNT - ARTILLERY_CONFIG.MIN_COUNT + 1));
+    const artillery = [];
+    const maxAttempts = 100;
+    
+    for (let i = 0; i < artilleryCount; i++) {
+        let placed = false;
+        
+        for (let attempt = 0; attempt < maxAttempts && !placed; attempt++) {
+            const x = Math.floor(Math.random() * GRID_SIZE);
+            const y = Math.floor(Math.random() * GRID_SIZE);
+            
+            const distToRed = getManhattanDistance(x, y, redSpawn.x, redSpawn.y);
+            const distToBlue = getManhattanDistance(x, y, blueSpawn.x, blueSpawn.y);
+            
+            if (distToRed < ARTILLERY_CONFIG.MIN_DISTANCE_FROM_SPAWN || 
+                distToBlue < ARTILLERY_CONFIG.MIN_DISTANCE_FROM_SPAWN) {
+                continue;
+            }
+            
+            const cell = gameState.grid[y][x];
+            if (cell.terrain !== TERRAIN.EMPTY || cell.owner !== null) {
+                continue;
+            }
+            
+            const tooCloseToOther = [...existingStructures, ...artillery].some(s => 
+                getManhattanDistance(x, y, s.x, s.y) < 4
+            );
+            if (tooCloseToOther) {
+                continue;
+            }
+            
+            gameState.grid[y][x] = {
+                terrain: TERRAIN.ARTILLERY,
+                owner: null,
+                troops: ARTILLERY_CONFIG.INITIAL_TROOPS,
+                unit: null
+            };
+            artillery.push({ x, y });
+            placed = true;
+        }
+    }
+    
+    console.log(`Generated ${artillery.length} Artillery at positions:`, artillery.map(a => `(${a.x},${a.y})`).join(', '));
+    return artillery;
+}
+
+function initializeGame(){
     gameState = {
         grid: [],
         players: {},
@@ -155,7 +218,8 @@ function initializeGame() {
             gameState.grid[y][x] = {
                 terrain: isMountain ? TERRAIN.MOUNTAIN : TERRAIN.EMPTY,
                 owner: null,
-                troops: 0
+                troops: 0,
+                unit: null
             };
         }
     }
@@ -167,21 +231,24 @@ function initializeGame() {
     console.log(`Random spawn positions: Red(${redSpawn.x},${redSpawn.y}) Blue(${blueSpawn.x},${blueSpawn.y})`);
 
     gameState.grid[redSpawn.y][redSpawn.x] = {
-        terrain: TERRAIN.GENERAL,
+        terrain: TERRAIN.EMPTY,
         owner: 'red',
-        troops: 10
+        troops: 10,
+        unit: UNIT.GENERAL
     };
 
     gameState.grid[blueSpawn.y][blueSpawn.x] = {
-        terrain: TERRAIN.GENERAL,
+        terrain: TERRAIN.EMPTY,
         owner: 'blue',
-        troops: 10
+        troops: 10,
+        unit: UNIT.GENERAL
     };
 
     clearMountainsAround(redSpawn.x, redSpawn.y);
     clearMountainsAround(blueSpawn.x, blueSpawn.y);
 
-    generateOutposts(redSpawn, blueSpawn);
+    const outposts = generateOutposts(redSpawn, blueSpawn);
+    generateArtillery(redSpawn, blueSpawn, outposts);
 }
 
 function gameTick(){
@@ -191,7 +258,7 @@ function gameTick(){
         for (let x = 0; x < GRID_SIZE; x++) {
             const cell = gameState.grid[y][x];
             
-            if (cell.terrain === TERRAIN.GENERAL && cell.owner) {
+            if (cell.unit === UNIT.GENERAL && cell.owner) {
                 const playerId = Object.keys(gameState.players).find(
                     id => gameState.players[id] === cell.owner
                 );
@@ -209,6 +276,60 @@ function gameTick(){
     emitGameStateToAll();
 }
 
+function artilleryTick() {
+    if (!gameState.gameStarted || gameState.winner) return;
+
+    const directions = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+    let stateChanged = false;
+
+    for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+            const cell = gameState.grid[y][x];
+            
+            if (cell.terrain !== TERRAIN.ARTILLERY) continue;
+            
+            const artilleryOwner = cell.owner;
+            
+            for (const [dx, dy] of directions) {
+                const nx = x + dx;
+                const ny = y + dy;
+                
+                if (nx < 0 || nx >= GRID_SIZE || ny < 0 || ny >= GRID_SIZE) continue;
+                
+                const targetCell = gameState.grid[ny][nx];
+                
+                if (!targetCell.owner) continue;
+                
+                const isEnemy = artilleryOwner === null || targetCell.owner !== artilleryOwner;
+                
+                if (isEnemy && targetCell.troops > 0) {
+                    targetCell.troops -= ARTILLERY_CONFIG.DAMAGE;
+                    
+                    if (targetCell.troops <= 0) {
+                        targetCell.troops = 0;
+                        targetCell.owner = null;
+                        
+                        if (targetCell.unit === UNIT.GENERAL) {
+                            const losingColor = targetCell.owner;
+                            const winningColor = losingColor === 'red' ? 'blue' : 'red';
+                            gameState.winner = winningColor;
+                            io.emit('gameOver', { winner: winningColor });
+                            targetCell.unit = null;
+                        }
+                    }
+                    
+                    stateChanged = true;
+                    console.log(`Artillery at (${x},${y}) fired at (${nx},${ny}), damage: ${ARTILLERY_CONFIG.DAMAGE}`);
+                }
+            }
+        }
+    }
+
+    if (stateChanged) {
+        emitGameStateToAll();
+    }
+}
+
 function startGameLoop(){
     if (gameLoopInterval) {
         console.log('Game loop already running, skipping start');
@@ -216,6 +337,7 @@ function startGameLoop(){
     }
     console.log('--- GAME LOOP STARTED ---');
     gameLoopInterval = setInterval(gameTick, TICK_INTERVAL);
+    artilleryLoopInterval = setInterval(artilleryTick, ARTILLERY_CONFIG.FIRE_INTERVAL);
 }
 
 function stopGameLoop() {
@@ -223,6 +345,11 @@ function stopGameLoop() {
         clearInterval(gameLoopInterval);
         gameLoopInterval = null;
         console.log('--- GAME LOOP STOPPED ---');
+    }
+    if (artilleryLoopInterval) {
+        clearInterval(artilleryLoopInterval);
+        artilleryLoopInterval = null;
+        console.log('--- ARTILLERY LOOP STOPPED ---');
     }
 }
 
@@ -349,7 +476,7 @@ function executeMove(playerId, from, to, splitMove = false) {
     const fromCell = gameState.grid[from.y][from.x];
     const toCell = gameState.grid[to.y][to.x];
     
-    const isMovingGeneral = fromCell.terrain === TERRAIN.GENERAL;
+    const isMovingGeneral = fromCell.unit === UNIT.GENERAL;
     
     let troopsToMove;
     if (splitMove) {
@@ -366,6 +493,7 @@ function executeMove(playerId, from, to, splitMove = false) {
     }
     
     let moveSuccessful = false;
+    let capturedEnemyGeneral = false;
 
     if (toCell.owner === playerColor) {
         toCell.troops += troopsToMove;
@@ -373,15 +501,16 @@ function executeMove(playerId, from, to, splitMove = false) {
     } else {
         const result = troopsToMove - toCell.troops;
         if (result > 0) {
-            if (toCell.terrain === TERRAIN.GENERAL && toCell.owner) {
+            if (toCell.unit === UNIT.GENERAL && toCell.owner) {
+                capturedEnemyGeneral = true;
                 gameState.winner = playerColor;
                 io.emit('gameOver', { winner: playerColor });
             }
 
             toCell.owner = playerColor;
             toCell.troops = result;
-            if (toCell.terrain !== TERRAIN.GENERAL && toCell.terrain !== TERRAIN.OUTPOST) {
-                toCell.terrain = TERRAIN.EMPTY;
+            if (capturedEnemyGeneral) {
+                toCell.unit = null;
             }
             moveSuccessful = true;
         } else if (result < 0) {
@@ -393,8 +522,8 @@ function executeMove(playerId, from, to, splitMove = false) {
     }
     
     if (isMovingGeneral && moveSuccessful && toCell.owner === playerColor && !splitMove) {
-        fromCell.terrain = TERRAIN.EMPTY;
-        toCell.terrain = TERRAIN.GENERAL;
+        fromCell.unit = null;
+        toCell.unit = UNIT.GENERAL;
         console.log(`General moved from (${from.x},${from.y}) to (${to.x},${to.y}) for ${playerColor}`);
     }
 
@@ -430,7 +559,7 @@ io.on('connection', (socket) => {
         for (let y = 0; y < GRID_SIZE; y++) {
             for (let x = 0; x < GRID_SIZE; x++) {
                 const cell = gameState.grid[y][x];
-                if (cell.terrain === TERRAIN.GENERAL && cell.owner === playerColor) {
+                if (cell.unit === UNIT.GENERAL && cell.owner === playerColor) {
                     cell.troops = 30;
                     console.log(`Rusher bonus applied: ${playerColor} general now has 30 troops`);
                 }
