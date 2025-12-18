@@ -62,6 +62,7 @@ let gameState = {
     grid: [],
     players: {},
     playerClasses: {},
+    playerNames: {},
     playerCount: 0,
     gameStarted: false,
     winner: null
@@ -206,6 +207,7 @@ function initializeGame(){
         grid: [],
         players: {},
         playerClasses: {},
+        playerNames: {},
         playerCount: 0,
         gameStarted: false,
         winner: null
@@ -538,11 +540,25 @@ function executeMove(playerId, from, to, splitMove = false) {
     emitGameStateToAll();
 }
 
+function getPlayerNamesForBroadcast() {
+    const names = {};
+    for (const [socketId, color] of Object.entries(gameState.players)) {
+        names[color] = gameState.playerNames[socketId] || color.toUpperCase();
+    }
+    return names;
+}
+
+function broadcastPlayerNames() {
+    const names = getPlayerNamesForBroadcast();
+    io.emit('playerNames', names);
+}
+
 io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
 
     const playerClass = socket.handshake.query.playerClass || 'rusher';
-    console.log(`Player ${socket.id} selected class: ${playerClass}`);
+    const nickname = socket.handshake.query.nickname || null;
+    console.log(`Player ${socket.id} selected class: ${playerClass}, nickname: ${nickname || 'none'}`);
 
     const actualPlayerCount = Object.keys(gameState.players).length;
     if (actualPlayerCount >= 2 || gameState.gameStarted) {
@@ -559,8 +575,12 @@ io.on('connection', (socket) => {
         playerColor = 'blue';
     }
 
+    const playerNumber = Object.keys(gameState.players).length + 1;
+    const defaultName = `General ${playerNumber}`;
+    
     gameState.players[socket.id] = playerColor;
     gameState.playerClasses[socket.id] = playerClass;
+    gameState.playerNames[socket.id] = nickname || defaultName;
     gameState.playerCount = Object.keys(gameState.players).length;
 
     if (playerClass === 'rusher') {
@@ -579,6 +599,7 @@ io.on('connection', (socket) => {
     console.log(`Player ${socket.id} assigned color: ${playerColor}, total players: ${gameState.playerCount}`);
 
     socket.emit('gameState', getFilteredGameState(playerColor));
+    broadcastPlayerNames();
     checkAndStartGame();
 
     socket.on('move', (data) => {
@@ -595,6 +616,7 @@ io.on('connection', (socket) => {
         const disconnectedColor = gameState.players[socket.id];
         delete gameState.players[socket.id];
         delete gameState.playerClasses[socket.id];
+        delete gameState.playerNames[socket.id];
         gameState.playerCount = Object.keys(gameState.players).length;
 
         console.log(`Player count after disconnect: ${gameState.playerCount}, gameStarted: ${gameState.gameStarted}`);

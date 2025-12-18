@@ -308,3 +308,126 @@ body {
     from { transform: scale(0.8); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
 }
+
+/* Login Overlay */
+.login-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #0f0f1a 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 5000;
+}
+
+.login-overlay.hidden {
+    display: none;
+}
+
+.login-content {
+    text-align: center;
+    padding: 60px 80px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 20px;
+    border: 2px solid #e94560;
+    box-shadow: 0 0 60px rgba(233, 69, 96, 0.3), 0 0 100px rgba(233, 69, 96, 0.1);
+    animation: scaleIn 0.5s ease;
+}
+
+.login-title {
+    font-size: 4.5rem;
+    font-weight: 900;
+    color: #e94560;
+    text-shadow: 0 0 30px rgba(233, 69, 96, 0.8), 0 0 60px rgba(233, 69, 96, 0.4);
+    margin-bottom: 10px;
+    letter-spacing: 8px;
+    animation: pulse 2s infinite;
+}
+
+.login-subtitle {
+    font-size: 1.2rem;
+    color: #888;
+    margin-bottom: 40px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+}
+
+.nickname-input {
+    width: 300px;
+    padding: 15px 25px;
+    font-size: 1.2rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid #444;
+    border-radius: 10px;
+    color: #fff;
+    text-align: center;
+    outline: none;
+    transition: all 0.3s ease;
+}
+
+.nickname-input::placeholder {
+    color: #666;
+}
+
+.nickname-input:focus {
+    border-color: #e94560;
+    box-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
+}
+
+.join-btn {
+    padding: 18px 50px;
+    font-size: 1.3rem;
+    font-weight: bold;
+    background: linear-gradient(135deg, #e94560 0%, #c0392b 100%);
+    color: white;
+    border: none;
+    border-radius: 30px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+}
+
+.join-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(233, 69, 96, 0.6);
+}
+
+.join-btn:active {
+    transform: scale(0.98);
+}
+
+/* HUD Player Names */
+#match-info {
+    font-size: 1.1rem;
+    padding: 8px 20px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 10px;
+    margin-bottom: 10px;
+}
+
+.player-name {
+    font-weight: bold;
+}
+
+.player-name.red {
+    color: #ff6b6b;
+}
+
+.player-name.blue {
+    color: #4dabf7;
+}
+
+.player-name.you {
+    text-decoration: underline;
+}
