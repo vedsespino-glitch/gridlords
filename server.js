@@ -278,23 +278,34 @@ function isValidMove(playerId, from, to) {
     return true;
 }
 
-function executeMove(playerId, from, to) {
+function executeMove(playerId, from, to, splitMove = false) {
     const playerColor = gameState.players[playerId];
     const fromCell = gameState.grid[from.y][from.x];
     const toCell = gameState.grid[to.y][to.x];
     
     const isMovingGeneral = fromCell.terrain === TERRAIN.GENERAL;
-
-    const attackingTroops = fromCell.troops - 1;
-    fromCell.troops = 1;
+    
+    let troopsToMove;
+    if (splitMove) {
+        troopsToMove = Math.floor(fromCell.troops / 2);
+        if (troopsToMove < 1) {
+            console.log(`Split move rejected: not enough troops (${fromCell.troops})`);
+            return;
+        }
+        fromCell.troops = fromCell.troops - troopsToMove;
+        console.log(`Split move: ${troopsToMove} troops moving, ${fromCell.troops} staying`);
+    } else {
+        troopsToMove = fromCell.troops - 1;
+        fromCell.troops = 1;
+    }
     
     let moveSuccessful = false;
 
     if (toCell.owner === playerColor) {
-        toCell.troops += attackingTroops;
+        toCell.troops += troopsToMove;
         moveSuccessful = true;
     } else {
-        const result = attackingTroops - toCell.troops;
+        const result = troopsToMove - toCell.troops;
         if (result > 0) {
             if (toCell.terrain === TERRAIN.GENERAL && toCell.owner) {
                 gameState.winner = playerColor;
@@ -315,7 +326,7 @@ function executeMove(playerId, from, to) {
         }
     }
     
-    if (isMovingGeneral && moveSuccessful && toCell.owner === playerColor) {
+    if (isMovingGeneral && moveSuccessful && toCell.owner === playerColor && !splitMove) {
         fromCell.terrain = TERRAIN.EMPTY;
         toCell.terrain = TERRAIN.GENERAL;
         console.log(`General moved from (${from.x},${from.y}) to (${to.x},${to.y}) for ${playerColor}`);
@@ -370,9 +381,9 @@ io.on('connection', (socket) => {
     socket.on('move', (data) => {
         if (!gameState.gameStarted || gameState.winner) return;
 
-        const { from, to } = data;
+        const { from, to, splitMove } = data;
         if (isValidMove(socket.id, from, to)) {
-            executeMove(socket.id, from, to);
+            executeMove(socket.id, from, to, splitMove || false);
         }
     });
 

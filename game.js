@@ -27,6 +27,7 @@ const COLORS = {
     grid: '#1a1a2e',
     text: '#ffffff',
     selected: '#f1c40f',
+    selectedSplit: '#e67e22',
     general: '#ffd700',
     fog: '#0a0a0a'
 };
@@ -43,6 +44,7 @@ let playerColor = null;
 let playerClass = null;
 let selectedCell = null;
 let gameStarted = false;
+let isSplitMove = false;
 
 function connectToServer(selectedClass) {
     playerClass = selectedClass;
@@ -119,6 +121,7 @@ function connectToServer(selectedClass) {
 
     socket.on('gameReset', () => {
         selectedCell = null;
+        isSplitMove = false;
         gameStarted = false;
         statusEl.textContent = 'Game Reset! Waiting for players...';
         statusEl.style.background = '#f39c12';
@@ -181,9 +184,13 @@ function render() {
             }
 
             if (selectedCell && selectedCell.x === x && selectedCell.y === y) {
-                ctx.strokeStyle = COLORS.selected;
+                ctx.strokeStyle = isSplitMove ? COLORS.selectedSplit : COLORS.selected;
                 ctx.lineWidth = 3;
+                if (isSplitMove) {
+                    ctx.setLineDash([4, 2]);
+                }
                 ctx.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                ctx.setLineDash([]);
             }
 
             if (cell.troops > 0 && cell.terrain !== TERRAIN.MOUNTAIN) {
@@ -250,24 +257,48 @@ canvas.addEventListener('click', (event) => {
     if (selectedCell) {
         if (clickedCell.x === selectedCell.x && clickedCell.y === selectedCell.y) {
             selectedCell = null;
+            isSplitMove = false;
         } else if (isAdjacent(selectedCell, clickedCell)) {
             socket.emit('move', {
                 from: selectedCell,
-                to: clickedCell
+                to: clickedCell,
+                splitMove: isSplitMove
             });
             selectedCell = null;
+            isSplitMove = false;
         } else if (cell.owner === playerColor && cell.troops > 1) {
             selectedCell = clickedCell;
+            isSplitMove = false;
         } else {
             selectedCell = null;
+            isSplitMove = false;
         }
     } else {
         if (cell.owner === playerColor && cell.troops > 1) {
             selectedCell = clickedCell;
+            isSplitMove = false;
         }
     }
 
     render();
+});
+
+canvas.addEventListener('dblclick', (event) => {
+    if (!gameState || !gameStarted || gameState.winner) return;
+
+    const clickedCell = getCellFromMouse(event);
+    if (!clickedCell) return;
+
+    const cell = gameState.grid[clickedCell.y][clickedCell.x];
+
+    if (cell.owner === playerColor && cell.troops >= 2) {
+        selectedCell = clickedCell;
+        isSplitMove = true;
+        const splitTroops = Math.floor(cell.troops / 2);
+        statusEl.textContent = `Split Move: ${splitTroops} tropas listas para mover`;
+        statusEl.style.background = '#e67e22';
+        render();
+    }
 });
 
 canvas.addEventListener('mousemove', (event) => {
