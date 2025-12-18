@@ -43,6 +43,42 @@ let gameState = {
     winner: null
 };
 
+const MIN_SPAWN_DISTANCE = 10;
+
+function getRandomSpawnPositions() {
+    const margin = 2;
+    const maxAttempts = 100;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const x1 = margin + Math.floor(Math.random() * (GRID_SIZE - 2 * margin));
+        const y1 = margin + Math.floor(Math.random() * (GRID_SIZE - 2 * margin));
+        const x2 = margin + Math.floor(Math.random() * (GRID_SIZE - 2 * margin));
+        const y2 = margin + Math.floor(Math.random() * (GRID_SIZE - 2 * margin));
+        
+        const manhattanDistance = Math.abs(x2 - x1) + Math.abs(y2 - y1);
+        
+        if (manhattanDistance > MIN_SPAWN_DISTANCE) {
+            return { pos1: { x: x1, y: y1 }, pos2: { x: x2, y: y2 } };
+        }
+    }
+    
+    return { pos1: { x: 2, y: 2 }, pos2: { x: GRID_SIZE - 3, y: GRID_SIZE - 3 } };
+}
+
+function clearMountainsAround(x, y) {
+    for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+            const ny = y + dy;
+            const nx = x + dx;
+            if (gameState.grid[ny] && gameState.grid[ny][nx]) {
+                if (gameState.grid[ny][nx].terrain === TERRAIN.MOUNTAIN) {
+                    gameState.grid[ny][nx].terrain = TERRAIN.EMPTY;
+                }
+            }
+        }
+    }
+}
+
 function initializeGame() {
     gameState = {
         grid: [],
@@ -65,34 +101,26 @@ function initializeGame() {
         }
     }
 
-    gameState.grid[2][2] = {
+    const spawnPositions = getRandomSpawnPositions();
+    const redSpawn = spawnPositions.pos1;
+    const blueSpawn = spawnPositions.pos2;
+    
+    console.log(`Random spawn positions: Red(${redSpawn.x},${redSpawn.y}) Blue(${blueSpawn.x},${blueSpawn.y})`);
+
+    gameState.grid[redSpawn.y][redSpawn.x] = {
         terrain: TERRAIN.GENERAL,
         owner: 'red',
         troops: 10
     };
 
-    gameState.grid[GRID_SIZE - 3][GRID_SIZE - 3] = {
+    gameState.grid[blueSpawn.y][blueSpawn.x] = {
         terrain: TERRAIN.GENERAL,
         owner: 'blue',
         troops: 10
     };
 
-    for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-            if (gameState.grid[2 + dy] && gameState.grid[2 + dy][2 + dx]) {
-                if (gameState.grid[2 + dy][2 + dx].terrain === TERRAIN.MOUNTAIN) {
-                    gameState.grid[2 + dy][2 + dx].terrain = TERRAIN.EMPTY;
-                }
-            }
-            const by = GRID_SIZE - 3 + dy;
-            const bx = GRID_SIZE - 3 + dx;
-            if (gameState.grid[by] && gameState.grid[by][bx]) {
-                if (gameState.grid[by][bx].terrain === TERRAIN.MOUNTAIN) {
-                    gameState.grid[by][bx].terrain = TERRAIN.EMPTY;
-                }
-            }
-        }
-    }
+    clearMountainsAround(redSpawn.x, redSpawn.y);
+    clearMountainsAround(blueSpawn.x, blueSpawn.y);
 }
 
 function gameTick() {
@@ -254,12 +282,17 @@ function executeMove(playerId, from, to) {
     const playerColor = gameState.players[playerId];
     const fromCell = gameState.grid[from.y][from.x];
     const toCell = gameState.grid[to.y][to.x];
+    
+    const isMovingGeneral = fromCell.terrain === TERRAIN.GENERAL;
 
     const attackingTroops = fromCell.troops - 1;
     fromCell.troops = 1;
+    
+    let moveSuccessful = false;
 
     if (toCell.owner === playerColor) {
         toCell.troops += attackingTroops;
+        moveSuccessful = true;
     } else {
         const result = attackingTroops - toCell.troops;
         if (result > 0) {
@@ -273,12 +306,19 @@ function executeMove(playerId, from, to) {
             if (toCell.terrain !== TERRAIN.GENERAL) {
                 toCell.terrain = TERRAIN.EMPTY;
             }
+            moveSuccessful = true;
         } else if (result < 0) {
             toCell.troops = Math.abs(result);
         } else {
             toCell.troops = 0;
             toCell.owner = null;
         }
+    }
+    
+    if (isMovingGeneral && moveSuccessful && toCell.owner === playerColor) {
+        fromCell.terrain = TERRAIN.EMPTY;
+        toCell.terrain = TERRAIN.GENERAL;
+        console.log(`General moved from (${from.x},${from.y}) to (${to.x},${to.y}) for ${playerColor}`);
     }
 
     emitGameStateToAll();
