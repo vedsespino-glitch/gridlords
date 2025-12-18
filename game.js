@@ -148,6 +148,14 @@ function connectToServer(selectedClass) {
             playerCounterEl.style.color = '#f39c12';
         }
     });
+
+    socket.on('artilleryFire', (data) => {
+        const ownerLabel = data.artilleryOwner === 'neutral' ? 'NEUTRAL' : data.artilleryOwner.toUpperCase();
+        console.log(`%c💣 ARTILLERY FIRE! %c${ownerLabel} artillery at (${data.from.x},${data.from.y}) hit ${data.targetOwner.toUpperCase()} at (${data.to.nx},${data.to.ny}) for ${data.damage} damage!`, 
+            'background: #ff8c00; color: white; font-weight: bold; padding: 2px 6px; border-radius: 3px;',
+            'color: #ff8c00; font-weight: bold;'
+        );
+    });
 }
 
 function render() {

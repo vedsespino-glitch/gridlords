@@ -52,10 +52,10 @@ const OUTPOST_CONFIG = {
 const ARTILLERY_CONFIG = {
     MIN_COUNT: 2,
     MAX_COUNT: 3,
-    INITIAL_TROOPS: 15,
+    INITIAL_TROOPS: 50,
     MIN_DISTANCE_FROM_SPAWN: 6,
-    FIRE_INTERVAL: 2000,
-    DAMAGE: 3
+    FIRE_INTERVAL: 1000,
+    DAMAGE: 5
 };
 
 let gameState = {
@@ -305,6 +305,14 @@ function artilleryTick() {
                 if (isEnemy && targetCell.troops > 0) {
                     const targetOwner = targetCell.owner;
                     targetCell.troops -= ARTILLERY_CONFIG.DAMAGE;
+                    
+                    io.emit('artilleryFire', {
+                        from: { x, y },
+                        to: { nx, ny },
+                        damage: ARTILLERY_CONFIG.DAMAGE,
+                        artilleryOwner: artilleryOwner || 'neutral',
+                        targetOwner: targetOwner
+                    });
                     
                     if (targetCell.troops <= 0) {
                         targetCell.troops = 0;
