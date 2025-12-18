@@ -31,7 +31,16 @@ let gameLoopInterval = null;
 const TERRAIN = {
     EMPTY: 0,
     MOUNTAIN: 1,
-    GENERAL: 2
+    GENERAL: 2,
+    OUTPOST: 3
+};
+
+const OUTPOST_CONFIG = {
+    MIN_COUNT: 4,
+    MAX_COUNT: 6,
+    INITIAL_TROOPS: 10,
+    MIN_DISTANCE_FROM_SPAWN: 5,
+    TROOP_PRODUCTION: 1
 };
 
 let gameState = {
@@ -79,6 +88,56 @@ function clearMountainsAround(x, y) {
     }
 }
 
+function getManhattanDistance(x1, y1, x2, y2) {
+    return Math.abs(x2 - x1) + Math.abs(y2 - y1);
+}
+
+function generateOutposts(redSpawn, blueSpawn) {
+    const outpostCount = OUTPOST_CONFIG.MIN_COUNT + Math.floor(Math.random() * (OUTPOST_CONFIG.MAX_COUNT - OUTPOST_CONFIG.MIN_COUNT + 1));
+    const outposts = [];
+    const maxAttempts = 100;
+    
+    for (let i = 0; i < outpostCount; i++) {
+        let placed = false;
+        
+        for (let attempt = 0; attempt < maxAttempts && !placed; attempt++) {
+            const x = Math.floor(Math.random() * GRID_SIZE);
+            const y = Math.floor(Math.random() * GRID_SIZE);
+            
+            const distToRed = getManhattanDistance(x, y, redSpawn.x, redSpawn.y);
+            const distToBlue = getManhattanDistance(x, y, blueSpawn.x, blueSpawn.y);
+            
+            if (distToRed < OUTPOST_CONFIG.MIN_DISTANCE_FROM_SPAWN || 
+                distToBlue < OUTPOST_CONFIG.MIN_DISTANCE_FROM_SPAWN) {
+                continue;
+            }
+            
+            const cell = gameState.grid[y][x];
+            if (cell.terrain !== TERRAIN.EMPTY || cell.owner !== null) {
+                continue;
+            }
+            
+            const tooCloseToOther = outposts.some(op => 
+                getManhattanDistance(x, y, op.x, op.y) < 3
+            );
+            if (tooCloseToOther) {
+                continue;
+            }
+            
+            gameState.grid[y][x] = {
+                terrain: TERRAIN.OUTPOST,
+                owner: null,
+                troops: OUTPOST_CONFIG.INITIAL_TROOPS
+            };
+            outposts.push({ x, y });
+            placed = true;
+        }
+    }
+    
+    console.log(`Generated ${outposts.length} Outposts at positions:`, outposts.map(o => `(${o.x},${o.y})`).join(', '));
+    return outposts;
+}
+
 function initializeGame() {
     gameState = {
         grid: [],
@@ -121,14 +180,17 @@ function initializeGame() {
 
     clearMountainsAround(redSpawn.x, redSpawn.y);
     clearMountainsAround(blueSpawn.x, blueSpawn.y);
+
+    generateOutposts(redSpawn, blueSpawn);
 }
 
-function gameTick() {
+function gameTick(){
     if (!gameState.gameStarted || gameState.winner) return;
 
     for (let y = 0; y < GRID_SIZE; y++) {
         for (let x = 0; x < GRID_SIZE; x++) {
             const cell = gameState.grid[y][x];
+            
             if (cell.terrain === TERRAIN.GENERAL && cell.owner) {
                 const playerId = Object.keys(gameState.players).find(
                     id => gameState.players[id] === cell.owner
@@ -136,6 +198,10 @@ function gameTick() {
                 const playerClass = playerId ? gameState.playerClasses[playerId] : null;
                 const troopProduction = playerClass === 'tank' ? 2 : 1;
                 cell.troops += troopProduction;
+            }
+            
+            if (cell.terrain === TERRAIN.OUTPOST && cell.owner) {
+                cell.troops += OUTPOST_CONFIG.TROOP_PRODUCTION;
             }
         }
     }
@@ -314,7 +380,7 @@ function executeMove(playerId, from, to, splitMove = false) {
 
             toCell.owner = playerColor;
             toCell.troops = result;
-            if (toCell.terrain !== TERRAIN.GENERAL) {
+            if (toCell.terrain !== TERRAIN.GENERAL && toCell.terrain !== TERRAIN.OUTPOST) {
                 toCell.terrain = TERRAIN.EMPTY;
             }
             moveSuccessful = true;
