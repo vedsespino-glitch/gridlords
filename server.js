@@ -303,6 +303,7 @@ function artilleryTick() {
                 const isEnemy = artilleryOwner === null || targetCell.owner !== artilleryOwner;
                 
                 if (isEnemy && targetCell.troops > 0) {
+                    const targetOwner = targetCell.owner;
                     targetCell.troops -= ARTILLERY_CONFIG.DAMAGE;
                     
                     if (targetCell.troops <= 0) {
@@ -310,8 +311,7 @@ function artilleryTick() {
                         targetCell.owner = null;
                         
                         if (targetCell.unit === UNIT.GENERAL) {
-                            const losingColor = targetCell.owner;
-                            const winningColor = losingColor === 'red' ? 'blue' : 'red';
+                            const winningColor = targetOwner === 'red' ? 'blue' : 'red';
                             gameState.winner = winningColor;
                             io.emit('gameOver', { winner: winningColor });
                             targetCell.unit = null;
