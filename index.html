@@ -7,8 +7,20 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- Login Overlay -->
+    <div id="login-overlay" class="login-overlay">
+        <div class="login-content">
+            <h1 class="login-title">GRIDLORDS</h1>
+            <p class="login-subtitle">Conquista. Domina. Reina.</p>
+            <div class="login-form">
+                <input type="text" id="nicknameInput" class="nickname-input" placeholder="Ingresa tu Nickname" maxlength="12" autocomplete="off">
+                <button id="joinBtn" class="join-btn">ENTRAR A LA BATALLA</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Class Selection Modal -->
-    <div id="class-modal" class="modal">
+    <div id="class-modal" class="modal hidden">
         <div class="modal-content">
             <h2>Choose Your Class</h2>
             <p class="modal-subtitle">Select your battle strategy</p>
@@ -40,6 +52,7 @@
         <div id="header">
             <h1>GridLords</h1>
             <div id="player-counter">Jugadores: 0/2</div>
+            <div id="match-info"></div>
             <div id="status">Select your class...</div>
             <div id="player-info"></div>
         </div>

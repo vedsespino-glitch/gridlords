@@ -11,6 +11,10 @@ const gameOverOverlay = document.getElementById('game-over-overlay');
 const gameOverTitle = document.getElementById('game-over-title');
 const gameOverMessage = document.getElementById('game-over-message');
 const playAgainBtn = document.getElementById('play-again-btn');
+const loginOverlay = document.getElementById('login-overlay');
+const nicknameInput = document.getElementById('nicknameInput');
+const joinBtn = document.getElementById('joinBtn');
+const matchInfoEl = document.getElementById('match-info');
 
 const GRID_SIZE = 20;
 const CELL_SIZE = 30;
@@ -54,6 +58,8 @@ let playerClass = null;
 let selectedCell = null;
 let gameStarted = false;
 let isSplitMove = false;
+let playerNickname = null;
+let playerNames = {};
 
 function connectToServer(selectedClass) {
     playerClass = selectedClass;
@@ -62,7 +68,7 @@ function connectToServer(selectedClass) {
                 transports: ['websocket'], 
                 upgrade: false,
                 timeout: 2000,
-                query: { playerClass: selectedClass }
+                query: { playerClass: selectedClass, nickname: playerNickname }
     });
 
     socket.on('connect', () => {
@@ -111,6 +117,7 @@ function connectToServer(selectedClass) {
     socket.on('gameOver', (data) => {
         gameStarted = false;
         const isWinner = data.winner === playerColor;
+        const winnerName = playerNames[data.winner] || data.winner.toUpperCase();
         
         gameOverOverlay.classList.remove('hidden', 'victory', 'defeat');
         gameOverOverlay.classList.add(isWinner ? 'victory' : 'defeat');
@@ -119,7 +126,7 @@ function connectToServer(selectedClass) {
             gameOverTitle.textContent = isWinner ? 'VICTORIA!' : 'DERROTA...';
             gameOverMessage.textContent = isWinner ? 'Tu oponente se desconecto.' : 'Te desconectaste.';
         } else {
-            gameOverTitle.textContent = isWinner ? 'VICTORIA!' : 'DERROTA...';
+            gameOverTitle.textContent = `VICTORIA DE ${winnerName}!`;
             gameOverMessage.textContent = isWinner ? 'Capturaste al General enemigo!' : 'Tu General fue capturado!';
         }
         
@@ -147,6 +154,11 @@ function connectToServer(selectedClass) {
             playerCounterEl.textContent = `Jugadores: ${current}/${required}`;
             playerCounterEl.style.color = '#f39c12';
         }
+    });
+
+    socket.on('playerNames', (data) => {
+        playerNames = data;
+        updateMatchInfo();
     });
 
     socket.on('artilleryFire', (data) => {
@@ -304,6 +316,23 @@ function isAdjacent(cell1, cell2) {
     return dx + dy === 1;
 }
 
+function updateMatchInfo() {
+    if (!playerColor || !playerNames) {
+        matchInfoEl.innerHTML = '';
+        return;
+    }
+    
+    const myName = playerNames[playerColor] || playerColor.toUpperCase();
+    const opponentColor = playerColor === 'red' ? 'blue' : 'red';
+    const opponentName = playerNames[opponentColor] || 'Esperando...';
+    
+    matchInfoEl.innerHTML = `
+        <span class="player-name ${playerColor} you">${myName}</span>
+        <span style="color: #888;"> VS </span>
+        <span class="player-name ${opponentColor}">${opponentName}</span>
+    `;
+}
+
 canvas.addEventListener('click', (event) => {
     if (!gameState || !gameStarted || gameState.winner) return;
 
@@ -379,6 +408,20 @@ resetBtn.addEventListener('click', () => {
     socket.emit('requestReset');
 });
 
+// Login overlay event handlers
+joinBtn.addEventListener('click', () => {
+    const nickname = nicknameInput.value.trim();
+    playerNickname = nickname || null;
+    loginOverlay.classList.add('hidden');
+    classModal.classList.remove('hidden');
+});
+
+nicknameInput.addEventListener('keypress', (event) => {
+    if (event.key === 'Enter') {
+        joinBtn.click();
+    }
+});
+
 // Class selection event handlers
 tankBtn.addEventListener('click', () => {
     classModal.classList.add('hidden');
@@ -398,5 +441,5 @@ playAgainBtn.addEventListener('click', () => {
     }
 });
 
-// Initial render (without connection - wait for class selection)
+// Initial render (without connection - wait for login)
 render();
