@@ -428,6 +428,56 @@ body {
     color: #4dabf7;
 }
 
+.player-name.green {
+    color: #2ecc71;
+}
+
+.player-name.yellow {
+    color: #f1c40f;
+}
+
+.player-name.purple {
+    color: #a569bd;
+}
+
 .player-name.you {
     text-decoration: underline;
+}
+
+/* Force Start Button */
+.force-start-btn {
+    padding: 10px 20px;
+    font-size: 1rem;
+    font-weight: bold;
+    background: linear-gradient(135deg, #f39c12 0%, #d68910 100%);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    margin: 10px 0;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.force-start-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(243, 156, 18, 0.5);
+}
+
+.force-start-btn:active {
+    transform: scale(0.98);
+}
+
+/* Additional player info colors */
+#player-info.green {
+    color: #2ecc71;
+}
+
+#player-info.yellow {
+    color: #f1c40f;
+}
+
+#player-info.purple {
+    color: #a569bd;
 }
