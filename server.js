@@ -22,7 +22,7 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', players: gameState.playerCount });
 });
 
-const GRID_SIZE = 20;
+const GRID_SIZE = 30;
 const TICK_INTERVAL = 1000;
 const MOUNTAIN_DENSITY = 0.15;
 
@@ -42,18 +42,18 @@ const UNIT = {
 };
 
 const OUTPOST_CONFIG = {
-    MIN_COUNT: 4,
-    MAX_COUNT: 6,
+    MIN_COUNT: 12,
+    MAX_COUNT: 15,
     INITIAL_TROOPS: 10,
-    MIN_DISTANCE_FROM_SPAWN: 5,
+    MIN_DISTANCE_FROM_SPAWN: 6,
     TROOP_PRODUCTION: 1
 };
 
 const ARTILLERY_CONFIG = {
-    MIN_COUNT: 2,
-    MAX_COUNT: 3,
+    MIN_COUNT: 6,
+    MAX_COUNT: 8,
     INITIAL_TROOPS: 50,
-    MIN_DISTANCE_FROM_SPAWN: 6,
+    MIN_DISTANCE_FROM_SPAWN: 8,
     FIRE_INTERVAL: 1000,
     DAMAGE: 5
 };
@@ -75,10 +75,10 @@ let gameState = {
     alivePlayers: 0
 };
 
-const MIN_SPAWN_DISTANCE = 10;
+const MIN_SPAWN_DISTANCE = 15;
 
 function getCornerSpawnPositions() {
-    const margin = 2;
+    const margin = 3;
     return [
         { x: margin, y: margin },
         { x: GRID_SIZE - margin - 1, y: margin },
@@ -128,7 +128,7 @@ function getManhattanDistance(x1, y1, x2, y2) {
 function generateOutposts(redSpawn, blueSpawn) {
     const outpostCount = OUTPOST_CONFIG.MIN_COUNT + Math.floor(Math.random() * (OUTPOST_CONFIG.MAX_COUNT - OUTPOST_CONFIG.MIN_COUNT + 1));
     const outposts = [];
-    const maxAttempts = 100;
+    const maxAttempts = 200;
     
     for (let i = 0; i < outpostCount; i++) {
         let placed = false;
@@ -175,7 +175,7 @@ function generateOutposts(redSpawn, blueSpawn) {
 function generateArtillery(redSpawn, blueSpawn, existingStructures) {
     const artilleryCount = ARTILLERY_CONFIG.MIN_COUNT + Math.floor(Math.random() * (ARTILLERY_CONFIG.MAX_COUNT - ARTILLERY_CONFIG.MIN_COUNT + 1));
     const artillery = [];
-    const maxAttempts = 100;
+    const maxAttempts = 200;
     
     for (let i = 0; i < artilleryCount; i++) {
         let placed = false;
