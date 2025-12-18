@@ -7,6 +7,10 @@ const classModal = document.getElementById('class-modal');
 const tankBtn = document.getElementById('tank-btn');
 const rusherBtn = document.getElementById('rusher-btn');
 const playerCounterEl = document.getElementById('player-counter');
+const gameOverOverlay = document.getElementById('game-over-overlay');
+const gameOverTitle = document.getElementById('game-over-title');
+const gameOverMessage = document.getElementById('game-over-message');
+const playAgainBtn = document.getElementById('play-again-btn');
 
 const GRID_SIZE = 20;
 const CELL_SIZE = 30;
@@ -23,7 +27,8 @@ const COLORS = {
     grid: '#1a1a2e',
     text: '#ffffff',
     selected: '#f1c40f',
-    general: '#ffd700'
+    general: '#ffd700',
+    fog: '#0a0a0a'
 };
 
 const TERRAIN = {
@@ -95,13 +100,21 @@ function connectToServer(selectedClass) {
     socket.on('gameOver', (data) => {
         gameStarted = false;
         const isWinner = data.winner === playerColor;
+        
+        gameOverOverlay.classList.remove('hidden', 'victory', 'defeat');
+        gameOverOverlay.classList.add(isWinner ? 'victory' : 'defeat');
+        
         if (data.reason === 'disconnect') {
-            statusEl.textContent = isWinner ? 'You Win! Opponent disconnected.' : 'You Lose! You disconnected.';
+            gameOverTitle.textContent = isWinner ? 'VICTORIA!' : 'DERROTA...';
+            gameOverMessage.textContent = isWinner ? 'Tu oponente se desconecto.' : 'Te desconectaste.';
         } else {
-            statusEl.textContent = isWinner ? 'VICTORY! You captured the enemy General!' : 'DEFEAT! Your General was captured!';
+            gameOverTitle.textContent = isWinner ? 'VICTORIA!' : 'DERROTA...';
+            gameOverMessage.textContent = isWinner ? 'Capturaste al General enemigo!' : 'Tu General fue capturado!';
         }
+        
+        statusEl.textContent = isWinner ? 'VICTORY!' : 'DEFEAT!';
         statusEl.style.background = isWinner ? '#27ae60' : '#e74c3c';
-        resetBtn.style.display = 'block';
+        resetBtn.style.display = 'none';
     });
 
     socket.on('gameReset', () => {
@@ -110,6 +123,7 @@ function connectToServer(selectedClass) {
         statusEl.textContent = 'Game Reset! Waiting for players...';
         statusEl.style.background = '#f39c12';
         resetBtn.style.display = 'none';
+        gameOverOverlay.classList.add('hidden');
     });
 
     socket.on('playerCount', (data) => {
@@ -136,6 +150,12 @@ function render() {
             const px = x * CELL_SIZE;
             const py = y * CELL_SIZE;
 
+            if (cell.isFog) {
+                ctx.fillStyle = COLORS.fog;
+                ctx.fillRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                continue;
+            }
+
             let fillColor = COLORS.empty;
 
             if (cell.terrain === TERRAIN.MOUNTAIN) {
@@ -151,8 +171,13 @@ function render() {
 
             if (cell.terrain === TERRAIN.GENERAL && cell.owner) {
                 ctx.strokeStyle = COLORS.general;
-                ctx.lineWidth = 2;
-                ctx.strokeRect(px + 3, py + 3, CELL_SIZE - 6, CELL_SIZE - 6);
+                ctx.lineWidth = 3;
+                ctx.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillText('👑', px + CELL_SIZE / 2, py + 2);
             }
 
             if (selectedCell && selectedCell.x === x && selectedCell.y === y) {
@@ -163,10 +188,11 @@ function render() {
 
             if (cell.troops > 0 && cell.terrain !== TERRAIN.MOUNTAIN) {
                 ctx.fillStyle = COLORS.text;
-                ctx.font = 'bold 12px Arial';
+                ctx.font = 'bold 11px Arial';
                 ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(cell.troops.toString(), px + CELL_SIZE / 2, py + CELL_SIZE / 2);
+                ctx.textBaseline = cell.terrain === TERRAIN.GENERAL ? 'bottom' : 'middle';
+                const textY = cell.terrain === TERRAIN.GENERAL ? py + CELL_SIZE - 3 : py + CELL_SIZE / 2;
+                ctx.fillText(cell.troops.toString(), px + CELL_SIZE / 2, textY);
             }
 
             if (cell.terrain === TERRAIN.MOUNTAIN) {
@@ -275,6 +301,12 @@ rusherBtn.addEventListener('click', () => {
     classModal.classList.add('hidden');
     statusEl.textContent = 'Connecting...';
     connectToServer('rusher');
+});
+
+playAgainBtn.addEventListener('click', () => {
+    if (socket) {
+        socket.emit('requestReset');
+    }
 });
 
 // Initial render (without connection - wait for class selection)
