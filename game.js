@@ -33,14 +33,18 @@ const COLORS = {
     outpost: '#444444',
     outpostRed: '#c0392b',
     outpostBlue: '#2980b9',
-    outpostBorder: '#ffd700'
+    outpostBorder: '#ffd700',
+    artillery: '#ff8c00',
+    artilleryRed: '#d35400',
+    artilleryBlue: '#2471a3',
+    artilleryBorder: '#ffa500'
 };
 
 const TERRAIN = {
     EMPTY: 0,
     MOUNTAIN: 1,
-    GENERAL: 2,
-    OUTPOST: 3
+    OUTPOST: 2,
+    ARTILLERY: 3
 };
 
 let socket;
@@ -170,19 +174,21 @@ function render() {
                 fillColor = COLORS.mountain;
             } else if (cell.terrain === TERRAIN.OUTPOST && !cell.owner) {
                 fillColor = COLORS.outpost;
+            } else if (cell.terrain === TERRAIN.ARTILLERY && !cell.owner) {
+                fillColor = COLORS.artillery;
             } else if (cell.owner === 'red') {
-                if (cell.terrain === TERRAIN.GENERAL) {
-                    fillColor = '#c0392b';
-                } else if (cell.terrain === TERRAIN.OUTPOST) {
+                if (cell.terrain === TERRAIN.OUTPOST) {
                     fillColor = COLORS.outpostRed;
+                } else if (cell.terrain === TERRAIN.ARTILLERY) {
+                    fillColor = COLORS.artilleryRed;
                 } else {
                     fillColor = COLORS.red;
                 }
             } else if (cell.owner === 'blue') {
-                if (cell.terrain === TERRAIN.GENERAL) {
-                    fillColor = '#2980b9';
-                } else if (cell.terrain === TERRAIN.OUTPOST) {
+                if (cell.terrain === TERRAIN.OUTPOST) {
                     fillColor = COLORS.outpostBlue;
+                } else if (cell.terrain === TERRAIN.ARTILLERY) {
+                    fillColor = COLORS.artilleryBlue;
                 } else {
                     fillColor = COLORS.blue;
                 }
@@ -191,7 +197,7 @@ function render() {
             ctx.fillStyle = fillColor;
             ctx.fillRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
 
-            if (cell.terrain === TERRAIN.GENERAL && cell.owner) {
+            if (cell.unit === 'general' && cell.owner) {
                 ctx.strokeStyle = COLORS.general;
                 ctx.lineWidth = 3;
                 ctx.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4);
@@ -214,6 +220,18 @@ function render() {
                 ctx.fillText('🏯', px + CELL_SIZE / 2, py + 1);
             }
 
+            if (cell.terrain === TERRAIN.ARTILLERY) {
+                ctx.strokeStyle = COLORS.artilleryBorder;
+                ctx.lineWidth = 3;
+                ctx.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillStyle = COLORS.text;
+                ctx.fillText('💣', px + CELL_SIZE / 2, py + 1);
+            }
+
             if (selectedCell && selectedCell.x === x && selectedCell.y === y) {
                 ctx.strokeStyle = isSplitMove ? COLORS.selectedSplit : COLORS.selected;
                 ctx.lineWidth = 3;
@@ -228,7 +246,7 @@ function render() {
                 ctx.fillStyle = COLORS.text;
                 ctx.font = 'bold 11px Arial';
                 ctx.textAlign = 'center';
-                const hasTopIcon = cell.terrain === TERRAIN.GENERAL || cell.terrain === TERRAIN.OUTPOST;
+                const hasTopIcon = cell.unit === 'general' || cell.terrain === TERRAIN.OUTPOST || cell.terrain === TERRAIN.ARTILLERY;
                 ctx.textBaseline = hasTopIcon ? 'bottom' : 'middle';
                 const textY = hasTopIcon ? py + CELL_SIZE - 3 : py + CELL_SIZE / 2;
                 ctx.fillText(cell.troops.toString(), px + CELL_SIZE / 2, textY);
