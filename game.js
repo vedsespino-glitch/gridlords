@@ -16,8 +16,8 @@ const nicknameInput = document.getElementById('nicknameInput');
 const joinBtn = document.getElementById('joinBtn');
 const matchInfoEl = document.getElementById('match-info');
 
-const GRID_SIZE = 20;
-const CELL_SIZE = 30;
+const GRID_SIZE = 30;
+const CELL_SIZE = 20;
 canvas.width = GRID_SIZE * CELL_SIZE;
 canvas.height = GRID_SIZE * CELL_SIZE;
 
@@ -282,21 +282,21 @@ function render() {
 
             if (cell.unit === 'general' && cell.owner) {
                 ctx.strokeStyle = COLORS.general;
-                ctx.lineWidth = 3;
-                ctx.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                ctx.lineWidth = 2;
+                ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
                 
-                ctx.font = '14px Arial';
+                ctx.font = '10px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
-                ctx.fillText('👑', px + CELL_SIZE / 2, py + 2);
+                ctx.fillText('👑', px + CELL_SIZE / 2, py + 1);
             }
 
             if (cell.terrain === TERRAIN.OUTPOST) {
                 ctx.strokeStyle = COLORS.outpostBorder;
-                ctx.lineWidth = 3;
-                ctx.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                ctx.lineWidth = 2;
+                ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
                 
-                ctx.font = '14px Arial';
+                ctx.font = '10px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.fillStyle = COLORS.text;
@@ -305,10 +305,10 @@ function render() {
 
             if (cell.terrain === TERRAIN.ARTILLERY) {
                 ctx.strokeStyle = COLORS.artilleryBorder;
-                ctx.lineWidth = 3;
-                ctx.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                ctx.lineWidth = 2;
+                ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
                 
-                ctx.font = '14px Arial';
+                ctx.font = '10px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.fillStyle = COLORS.text;
@@ -317,30 +317,30 @@ function render() {
 
             if (selectedCell && selectedCell.x === x && selectedCell.y === y) {
                 ctx.strokeStyle = isSplitMove ? COLORS.selectedSplit : COLORS.selected;
-                ctx.lineWidth = 3;
+                ctx.lineWidth = 2;
                 if (isSplitMove) {
-                    ctx.setLineDash([4, 2]);
+                    ctx.setLineDash([3, 2]);
                 }
-                ctx.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
                 ctx.setLineDash([]);
             }
 
             if (cell.troops > 0 && cell.terrain !== TERRAIN.MOUNTAIN) {
                 ctx.fillStyle = COLORS.text;
-                ctx.font = 'bold 11px Arial';
+                ctx.font = 'bold 8px Arial';
                 ctx.textAlign = 'center';
                 const hasTopIcon = cell.unit === 'general' || cell.terrain === TERRAIN.OUTPOST || cell.terrain === TERRAIN.ARTILLERY;
                 ctx.textBaseline = hasTopIcon ? 'bottom' : 'middle';
-                const textY = hasTopIcon ? py + CELL_SIZE - 3 : py + CELL_SIZE / 2;
+                const textY = hasTopIcon ? py + CELL_SIZE - 2 : py + CELL_SIZE / 2;
                 ctx.fillText(cell.troops.toString(), px + CELL_SIZE / 2, textY);
             }
 
             if (cell.terrain === TERRAIN.MOUNTAIN) {
                 ctx.fillStyle = '#4a5568';
                 ctx.beginPath();
-                ctx.moveTo(px + CELL_SIZE / 2, py + 5);
-                ctx.lineTo(px + CELL_SIZE - 5, py + CELL_SIZE - 5);
-                ctx.lineTo(px + 5, py + CELL_SIZE - 5);
+                ctx.moveTo(px + CELL_SIZE / 2, py + 3);
+                ctx.lineTo(px + CELL_SIZE - 3, py + CELL_SIZE - 3);
+                ctx.lineTo(px + 3, py + CELL_SIZE - 3);
                 ctx.closePath();
                 ctx.fill();
             }
