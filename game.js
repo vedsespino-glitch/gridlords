@@ -30,10 +30,10 @@ const COLORS = {
     selectedSplit: '#e67e22',
     general: '#ffd700',
     fog: '#0a0a0a',
-    outpost: '#4a5568',
+    outpost: '#444444',
     outpostRed: '#c0392b',
     outpostBlue: '#2980b9',
-    outpostBorder: '#a0aec0'
+    outpostBorder: '#ffd700'
 };
 
 const TERRAIN = {
@@ -204,14 +204,14 @@ function render() {
 
             if (cell.terrain === TERRAIN.OUTPOST) {
                 ctx.strokeStyle = COLORS.outpostBorder;
-                ctx.lineWidth = 2;
+                ctx.lineWidth = 3;
                 ctx.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4);
                 
-                ctx.font = '12px Arial';
+                ctx.font = '14px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.fillStyle = COLORS.text;
-                ctx.fillText('♖', px + CELL_SIZE / 2, py + 2);
+                ctx.fillText('🏯', px + CELL_SIZE / 2, py + 1);
             }
 
             if (selectedCell && selectedCell.x === x && selectedCell.y === y) {
