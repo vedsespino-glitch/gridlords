@@ -112,10 +112,10 @@ function gameTick() {
         }
     }
 
-    io.emit('gameState', getPublicGameState());
+    emitGameStateToAll();
 }
 
-function startGameLoop() {
+function startGameLoop(){
     if (gameLoopInterval) {
         console.log('Game loop already running, skipping start');
         return;
@@ -144,7 +144,7 @@ function checkAndStartGame() {
         gameState.gameStarted = true;
         gameState.playerCount = 2;
         io.emit('gameStart');
-        io.emit('gameState', getPublicGameState());
+        emitGameStateToAll();
         startGameLoop();
         console.log('Game started with 2 players!');
     }
@@ -162,8 +162,64 @@ function resetGameForNewMatch() {
     stopGameLoop();
     initializeGame();
     io.emit('gameReset');
-    io.emit('gameState', getPublicGameState());
+    emitGameStateToAll();
     broadcastPlayerCount();
+}
+
+function getVisibleCells(playerColor) {
+    const visible = new Set();
+    
+    for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+            const cell = gameState.grid[y][x];
+            if (cell.owner === playerColor) {
+                visible.add(`${x},${y}`);
+                const directions = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+                for (const [dx, dy] of directions) {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+                        visible.add(`${nx},${ny}`);
+                    }
+                }
+            }
+        }
+    }
+    
+    return visible;
+}
+
+function getFilteredGameState(playerColor) {
+    const visible = getVisibleCells(playerColor);
+    const filteredGrid = [];
+    
+    for (let y = 0; y < GRID_SIZE; y++) {
+        filteredGrid[y] = [];
+        for (let x = 0; x < GRID_SIZE; x++) {
+            const key = `${x},${y}`;
+            if (visible.has(key)) {
+                filteredGrid[y][x] = { ...gameState.grid[y][x] };
+            } else {
+                filteredGrid[y][x] = { isFog: true };
+            }
+        }
+    }
+    
+    return {
+        grid: filteredGrid,
+        gameStarted: gameState.gameStarted,
+        winner: gameState.winner,
+        playerCount: gameState.playerCount
+    };
+}
+
+function emitGameStateToAll() {
+    for (const [socketId, playerColor] of Object.entries(gameState.players)) {
+        const socket = io.sockets.sockets.get(socketId);
+        if (socket) {
+            socket.emit('gameState', getFilteredGameState(playerColor));
+        }
+    }
 }
 
 function getPublicGameState() {
@@ -225,7 +281,7 @@ function executeMove(playerId, from, to) {
         }
     }
 
-    io.emit('gameState', getPublicGameState());
+    emitGameStateToAll();
 }
 
 io.on('connection', (socket) => {
@@ -268,7 +324,7 @@ io.on('connection', (socket) => {
     socket.emit('playerAssigned', { color: playerColor, playerClass: playerClass });
     console.log(`Player ${socket.id} assigned color: ${playerColor}, total players: ${gameState.playerCount}`);
 
-    socket.emit('gameState', getPublicGameState());
+    socket.emit('gameState', getFilteredGameState(playerColor));
     checkAndStartGame();
 
     socket.on('move', (data) => {
