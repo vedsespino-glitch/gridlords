@@ -114,6 +114,63 @@ let currentRoomId = null;
 let isHost = false;
 let pendingAction = null; // 'create' or 'join'
 
+// Audio Manager for game sound effects
+const AudioManager = {
+    sounds: {},
+    muted: false,
+    volume: 0.5,
+    
+    // Sound URLs from free sources (Pixabay CDN)
+    soundUrls: {
+        move: 'https://cdn.pixabay.com/audio/2022/03/15/audio_115b9b87e4.mp3',      // Soft step/move sound
+        attack: 'https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a73467.mp3',    // Hit/sword sound
+        cannon: 'https://cdn.pixabay.com/audio/2022/03/15/audio_8cb749bf56.mp3',    // Explosion sound
+        split: 'https://cdn.pixabay.com/audio/2021/08/04/audio_0625c1539c.mp3',     // Whoosh/cut sound
+        win: 'https://cdn.pixabay.com/audio/2021/08/04/audio_12b0c7443c.mp3',       // Victory fanfare
+        lose: 'https://cdn.pixabay.com/audio/2022/03/15/audio_942694a069.mp3'       // Game over sound
+    },
+    
+    init: function() {
+        // Preload all sounds
+        for (const [name, url] of Object.entries(this.soundUrls)) {
+            this.sounds[name] = new Audio(url);
+            this.sounds[name].volume = this.volume;
+            this.sounds[name].preload = 'auto';
+        }
+        console.log('AudioManager initialized with', Object.keys(this.sounds).length, 'sounds');
+    },
+    
+    play: function(soundName) {
+        if (this.muted) return;
+        
+        const sound = this.sounds[soundName];
+        if (sound) {
+            // Clone the audio to allow overlapping sounds
+            const clone = sound.cloneNode();
+            clone.volume = this.volume;
+            clone.play().catch(err => {
+                // Ignore autoplay errors (user hasn't interacted yet)
+                console.log('Audio play blocked:', err.message);
+            });
+        }
+    },
+    
+    toggleMute: function() {
+        this.muted = !this.muted;
+        return this.muted;
+    },
+    
+    setVolume: function(vol) {
+        this.volume = Math.max(0, Math.min(1, vol));
+        for (const sound of Object.values(this.sounds)) {
+            sound.volume = this.volume;
+        }
+    }
+};
+
+// Track previous game state for detecting changes
+let previousGameState = null;
+
 function connectToServer(selectedClass) {
     playerClass = selectedClass;
 
@@ -277,6 +334,21 @@ function connectToServer(selectedClass) {
     });
 
     socket.on('gameState', (state) => {
+        // Detect ownership changes (attacks) by comparing with previous state
+        if (previousGameState && previousGameState.grid && state.grid) {
+            for (let y = 0; y < state.grid.length; y++) {
+                for (let x = 0; x < state.grid[y].length; x++) {
+                    const prevCell = previousGameState.grid[y][x];
+                    const newCell = state.grid[y][x];
+                    // If cell changed owner and new owner is the player, play attack sound
+                    if (prevCell && newCell && prevCell.owner !== newCell.owner && newCell.owner === playerColor) {
+                        AudioManager.play('attack');
+                        break;
+                    }
+                }
+            }
+        }
+        previousGameState = JSON.parse(JSON.stringify(state));
         gameState = state;
         render();
     });
@@ -285,6 +357,9 @@ function connectToServer(selectedClass) {
         gameStarted = false;
         const isWinner = data.winner === playerColor;
         const winnerName = playerNames[data.winner] || (data.winner ? data.winner.toUpperCase() : 'NADIE');
+        
+        // Play win or lose sound
+        AudioManager.play(isWinner ? 'win' : 'lose');
         
         gameOverOverlay.classList.remove('hidden', 'victory', 'defeat');
         gameOverOverlay.classList.add(isWinner ? 'victory' : 'defeat');
@@ -367,6 +442,9 @@ function connectToServer(selectedClass) {
     });
 
     socket.on('artilleryFire', (data) => {
+        // Play cannon sound when artillery fires
+        AudioManager.play('cannon');
+        
         const ownerLabel = data.artilleryOwner === 'neutral' ? 'NEUTRAL' : data.artilleryOwner.toUpperCase();
         console.log('%c💣 ARTILLERY FIRE! %c' + ownerLabel + ' artillery at (' + data.from.x + ',' + data.from.y + ') hit ' + data.targetOwner.toUpperCase() + ' at (' + data.to.nx + ',' + data.to.ny + ') for ' + data.damage + ' damage!', 
             'background: #ff8c00; color: white; font-weight: bold; padding: 2px 6px; border-radius: 3px;',
@@ -543,6 +621,8 @@ canvas.addEventListener('click', (event) => {
             selectedCell = null;
             isSplitMove = false;
         } else if (isAdjacent(selectedCell, clickedCell)) {
+            // Play move sound when moving troops
+            AudioManager.play('move');
             socket.emit('move', {
                 from: selectedCell,
                 to: clickedCell,
@@ -576,6 +656,8 @@ canvas.addEventListener('dblclick', (event) => {
     const cell = gameState.grid[clickedCell.y][clickedCell.x];
 
     if (cell.owner === playerColor && cell.troops >= 2) {
+        // Play split sound when activating split move
+        AudioManager.play('split');
         selectedCell = clickedCell;
         isSplitMove = true;
         const splitTroops = Math.floor(cell.troops / 2);
@@ -688,6 +770,19 @@ playAgainBtn.addEventListener('click', () => {
         socket.emit('requestReset');
     }
 });
+
+// Initialize AudioManager
+AudioManager.init();
+
+// Mute button handler
+const muteBtn = document.getElementById('muteBtn');
+if (muteBtn) {
+    muteBtn.addEventListener('click', () => {
+        const isMuted = AudioManager.toggleMute();
+        muteBtn.textContent = isMuted ? '🔇' : '🔈';
+        muteBtn.title = isMuted ? 'Activar sonido' : 'Silenciar';
+    });
+}
 
 // Initial render (without connection - wait for login)
 render();
