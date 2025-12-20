@@ -41,6 +41,12 @@ const helpBtn = document.getElementById('helpBtn');
 const helpModal = document.getElementById('help-modal');
 const closeHelpBtn = document.getElementById('closeHelpBtn');
 
+// Ranking Modal UI elements
+const rankingBtn = document.getElementById('rankingBtn');
+const rankingModal = document.getElementById('ranking-modal');
+const closeRankingBtn = document.getElementById('closeRankingBtn');
+const rankingList = document.getElementById('ranking-list');
+
 const GRID_SIZE = 30;
 const CELL_SIZE = 20;
 canvas.width = GRID_SIZE * CELL_SIZE;
@@ -402,7 +408,7 @@ function connectToServer(selectedClass) {
     socket.on('gameOver', (data) => {
         gameStarted = false;
         const isWinner = data.winner === playerColor;
-        const winnerName = playerNames[data.winner] || (data.winner ? data.winner.toUpperCase() : 'NADIE');
+        const winnerName = data.winnerName || playerNames[data.winner] || (data.winner ? data.winner.toUpperCase() : 'NADIE');
         
         // Hide mobile mode toggle button on game over
         const modeToggleBtn = document.getElementById('modeToggleBtn');
@@ -418,16 +424,28 @@ function connectToServer(selectedClass) {
         
         if (data.reason === 'last_man_standing') {
             gameOverTitle.textContent = isWinner ? 'VICTORIA!' : 'VICTORIA DE ' + winnerName + '!';
-            gameOverMessage.textContent = isWinner ? 'Eres el ultimo superviviente! Conquistaste todos los reinos!' : 'El juego ha terminado.';
+            if (isWinner && data.totalWins) {
+                gameOverMessage.textContent = 'Tu victoria #' + data.totalWins + '! Eres el ultimo superviviente!';
+            } else {
+                gameOverMessage.textContent = isWinner ? 'Eres el ultimo superviviente! Conquistaste todos los reinos!' : 'El juego ha terminado.';
+            }
         } else if (data.reason === 'disconnect') {
             gameOverTitle.textContent = isWinner ? 'VICTORIA!' : 'DERROTA...';
-            gameOverMessage.textContent = isWinner ? 'Tu oponente se desconecto.' : 'Te desconectaste.';
+            if (isWinner && data.totalWins) {
+                gameOverMessage.textContent = 'Tu victoria #' + data.totalWins + '! Tu oponente se desconecto.';
+            } else {
+                gameOverMessage.textContent = isWinner ? 'Tu oponente se desconecto.' : 'Te desconectaste.';
+            }
         } else if (data.reason === 'draw') {
             gameOverTitle.textContent = 'EMPATE';
             gameOverMessage.textContent = 'No quedan supervivientes!';
         } else {
             gameOverTitle.textContent = 'VICTORIA DE ' + winnerName + '!';
-            gameOverMessage.textContent = isWinner ? 'Capturaste al General enemigo!' : 'Tu General fue capturado!';
+            if (isWinner && data.totalWins) {
+                gameOverMessage.textContent = 'Tu victoria #' + data.totalWins + '! Capturaste al General enemigo!';
+            } else {
+                gameOverMessage.textContent = isWinner ? 'Capturaste al General enemigo!' : 'Tu General fue capturado!';
+            }
         }
         
         statusEl.textContent = isWinner ? 'VICTORY!' : 'DEFEAT!';
@@ -518,6 +536,10 @@ function connectToServer(selectedClass) {
 
     socket.on('new_message', (data) => {
         addChatMessage(data.nickname, data.text, data.color);
+    });
+
+    socket.on('ranking_data', (data) => {
+        renderRanking(data.ranking);
     });
 }
 
@@ -1124,6 +1146,102 @@ if (helpModal) {
     helpModal.addEventListener('click', (event) => {
         if (event.target === helpModal) {
             helpModal.classList.add('hidden');
+        }
+    });
+}
+
+function renderRanking(ranking) {
+    if (!rankingList) return;
+    
+    if (!ranking || ranking.length === 0) {
+        rankingList.innerHTML = '<p class="ranking-empty">No hay victorias registradas aun.</p>';
+        return;
+    }
+    
+    let html = '';
+    ranking.forEach((player, index) => {
+        let medal = '';
+        let itemClass = 'ranking-item';
+        
+        if (index === 0) {
+            medal = '🥇';
+            itemClass += ' gold';
+        } else if (index === 1) {
+            medal = '🥈';
+            itemClass += ' silver';
+        } else if (index === 2) {
+            medal = '🥉';
+            itemClass += ' bronze';
+        } else {
+            medal = (index + 1) + '.';
+        }
+        
+        const winsText = player.wins === 1 ? '1 Victoria' : player.wins + ' Victorias';
+        
+        html += '<div class="' + itemClass + '">';
+        html += '<span class="ranking-position">' + medal + '</span>';
+        html += '<span class="ranking-name">' + escapeHtml(player.name) + '</span>';
+        html += '<span class="ranking-wins">' + winsText + '</span>';
+        html += '</div>';
+    });
+    
+    rankingList.innerHTML = html;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function openRankingModal() {
+    if (rankingModal) {
+        rankingModal.classList.remove('hidden');
+        rankingList.innerHTML = '<p class="ranking-loading">Cargando ranking...</p>';
+        
+        if (socket && socket.connected) {
+            socket.emit('get_ranking');
+        } else {
+            const tempSocket = io(window.location.origin, {
+                transports: ['websocket'],
+                upgrade: false,
+                timeout: 5000
+            });
+            
+            tempSocket.on('connect', () => {
+                tempSocket.emit('get_ranking');
+            });
+            
+            tempSocket.on('ranking_data', (data) => {
+                renderRanking(data.ranking);
+                tempSocket.disconnect();
+            });
+            
+            tempSocket.on('connect_error', () => {
+                rankingList.innerHTML = '<p class="ranking-empty">Error al cargar el ranking.</p>';
+            });
+        }
+    }
+}
+
+function closeRankingModal() {
+    if (rankingModal) {
+        rankingModal.classList.add('hidden');
+    }
+}
+
+if (rankingBtn) {
+    rankingBtn.addEventListener('click', openRankingModal);
+}
+
+if (closeRankingBtn) {
+    closeRankingBtn.addEventListener('click', closeRankingModal);
+}
+
+if (rankingModal) {
+    rankingModal.addEventListener('click', (event) => {
+        if (event.target === rankingModal) {
+            closeRankingModal();
         }
     });
 }
