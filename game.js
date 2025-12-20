@@ -35,38 +35,40 @@ canvas.width = GRID_SIZE * CELL_SIZE;
 canvas.height = GRID_SIZE * CELL_SIZE;
 
 const COLORS = {
-    empty: '#2d3436',
-    mountain: '#636e72',
-    red: '#e74c3c',
-    blue: '#3498db',
-    green: '#27ae60',
-    yellow: '#f1c40f',
-    purple: '#9b59b6',
-    redLight: '#ff7675',
-    blueLight: '#74b9ff',
-    greenLight: '#2ecc71',
-    yellowLight: '#f39c12',
-    purpleLight: '#a569bd',
-    grid: '#1a1a2e',
+    empty: '#1a1a1a',
+    mountain: '#4a4a4a',
+    red: '#c0392b',
+    blue: '#2980b9',
+    green: '#1e8449',
+    yellow: '#d4ac0d',
+    purple: '#7d3c98',
+    redLight: 'rgba(192, 57, 43, 0.7)',
+    blueLight: 'rgba(41, 128, 185, 0.7)',
+    greenLight: 'rgba(30, 132, 73, 0.7)',
+    yellowLight: 'rgba(212, 172, 13, 0.7)',
+    purpleLight: 'rgba(125, 60, 152, 0.7)',
+    grid: '#0d0d0d',
     text: '#ffffff',
     selected: '#f1c40f',
     selectedSplit: '#e67e22',
     general: '#ffd700',
-    fog: '#0a0a0a',
-    outpost: '#444444',
-    outpostRed: '#c0392b',
-    outpostBlue: '#2980b9',
-    outpostGreen: '#1e8449',
-    outpostYellow: '#d4ac0d',
-    outpostPurple: '#7d3c98',
+    fog: '#1a1a1a',
+    fogPattern: '#252525',
+    outpost: '#3d3d3d',
+    outpostRed: '#922b21',
+    outpostBlue: '#1a5276',
+    outpostGreen: '#145a32',
+    outpostYellow: '#9a7d0a',
+    outpostPurple: '#5b2c6f',
     outpostBorder: '#ffd700',
-    artillery: '#ff8c00',
-    artilleryRed: '#d35400',
-    artilleryBlue: '#2471a3',
+    artillery: '#8b4513',
+    artilleryRed: '#a93226',
+    artilleryBlue: '#1f618d',
     artilleryGreen: '#196f3d',
     artilleryYellow: '#b7950b',
     artilleryPurple: '#6c3483',
-    artilleryBorder: '#ffa500'
+    artilleryBorder: '#ff6600',
+    territoryBorder: '#ffffff'
 };
 
 function getPlayerColor(owner) {
@@ -498,109 +500,188 @@ function render() {
             const px = x * CELL_SIZE;
             const py = y * CELL_SIZE;
 
+            // Draw fog of war with subtle pattern
             if (cell.isFog) {
                 ctx.fillStyle = COLORS.fog;
                 ctx.fillRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                
+                // Add subtle diagonal pattern for "unknown" effect
+                ctx.strokeStyle = COLORS.fogPattern;
+                ctx.lineWidth = 0.5;
+                ctx.beginPath();
+                ctx.moveTo(px + 1, py + CELL_SIZE - 1);
+                ctx.lineTo(px + CELL_SIZE - 1, py + 1);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(px + CELL_SIZE / 2, py + CELL_SIZE - 1);
+                ctx.lineTo(px + CELL_SIZE - 1, py + CELL_SIZE / 2);
+                ctx.stroke();
+                
+                // Draw question mark for mystery
+                ctx.fillStyle = '#333333';
+                ctx.font = 'bold 8px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('?', px + CELL_SIZE / 2, py + CELL_SIZE / 2);
                 continue;
             }
 
             let fillColor = COLORS.empty;
+            let hasOwner = false;
 
             if (cell.terrain === TERRAIN.MOUNTAIN) {
                 fillColor = COLORS.mountain;
             } else if (cell.terrain === TERRAIN.OUTPOST) {
                 fillColor = getOutpostColor(cell.owner);
+                hasOwner = !!cell.owner;
             } else if (cell.terrain === TERRAIN.ARTILLERY) {
                 fillColor = getArtilleryColor(cell.owner);
+                hasOwner = !!cell.owner;
             } else if (cell.owner) {
                 fillColor = getPlayerColor(cell.owner);
+                hasOwner = true;
             }
 
+            // Draw base cell color
             ctx.fillStyle = fillColor;
             ctx.fillRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
 
+            // Add glowing border for conquered territory
+            if (hasOwner && cell.terrain !== TERRAIN.OUTPOST && cell.terrain !== TERRAIN.ARTILLERY && cell.unit !== 'general') {
+                ctx.save();
+                ctx.shadowColor = getPlayerColor(cell.owner);
+                ctx.shadowBlur = 3;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.restore();
+            }
+
+            // Draw General (King) with large castle emoji
             if (cell.unit === 'general' && cell.owner) {
+                // Golden glow border for general
+                ctx.save();
+                ctx.shadowColor = COLORS.general;
+                ctx.shadowBlur = 6;
                 ctx.strokeStyle = COLORS.general;
                 ctx.lineWidth = 2;
                 ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.restore();
                 
-                ctx.font = '10px Arial';
+                // Draw castle emoji (larger)
+                ctx.font = '12px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
-                ctx.fillText('👑', px + CELL_SIZE / 2, py + 1);
+                ctx.fillText('🏰', px + CELL_SIZE / 2, py + 1);
             }
 
+            // Draw Outpost (Tower) with fort emoji
             if (cell.terrain === TERRAIN.OUTPOST) {
+                ctx.save();
+                ctx.shadowColor = COLORS.outpostBorder;
+                ctx.shadowBlur = 4;
                 ctx.strokeStyle = COLORS.outpostBorder;
                 ctx.lineWidth = 2;
                 ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.restore();
                 
-                ctx.font = '10px Arial';
+                // Draw tower emoji
+                ctx.font = '11px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
-                ctx.fillStyle = COLORS.text;
                 ctx.fillText('🏯', px + CELL_SIZE / 2, py + 1);
             }
 
+            // Draw Artillery with cannon emoji
             if (cell.terrain === TERRAIN.ARTILLERY) {
+                ctx.save();
+                ctx.shadowColor = COLORS.artilleryBorder;
+                ctx.shadowBlur = 4;
                 ctx.strokeStyle = COLORS.artilleryBorder;
                 ctx.lineWidth = 2;
                 ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.restore();
                 
-                ctx.font = '10px Arial';
+                // Draw cannon/bomb emoji
+                ctx.font = '11px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
-                ctx.fillStyle = COLORS.text;
-                ctx.fillText('💣', px + CELL_SIZE / 2, py + 1);
+                ctx.fillText('🧨', px + CELL_SIZE / 2, py + 1);
             }
 
+            // Draw selection highlight
             if (selectedCell && selectedCell.x === x && selectedCell.y === y) {
-                // Determine if we're in split mode (either from double-click or mobile toggle)
                 const isInSplitMode = isSplitMove || mobileSplitMode;
                 const selectionColor = isInSplitMode ? COLORS.selectedSplit : COLORS.selected;
                 
                 // Draw semi-transparent highlight overlay
-                ctx.fillStyle = isInSplitMode ? 'rgba(230, 126, 34, 0.3)' : 'rgba(241, 196, 15, 0.3)';
+                ctx.fillStyle = isInSplitMode ? 'rgba(230, 126, 34, 0.4)' : 'rgba(241, 196, 15, 0.4)';
                 ctx.fillRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
                 
-                // Draw glow effect
+                // Draw animated glow effect
                 ctx.save();
                 ctx.shadowColor = selectionColor;
-                ctx.shadowBlur = 8;
+                ctx.shadowBlur = 10;
                 ctx.strokeStyle = selectionColor;
                 ctx.lineWidth = 3;
                 ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
                 ctx.restore();
                 
-                // Draw inner bright border for extra visibility
+                // Draw inner bright border
                 ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 1;
                 ctx.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4);
             }
 
+            // Draw troops with army icons for large armies
             if (cell.troops > 0 && cell.terrain !== TERRAIN.MOUNTAIN) {
-                ctx.fillStyle = COLORS.text;
-                ctx.font = 'bold 8px Arial';
-                ctx.textAlign = 'center';
                 const hasTopIcon = cell.unit === 'general' || cell.terrain === TERRAIN.OUTPOST || cell.terrain === TERRAIN.ARTILLERY;
-                ctx.textBaseline = hasTopIcon ? 'bottom' : 'middle';
-                const textY = hasTopIcon ? py + CELL_SIZE - 2 : py + CELL_SIZE / 2;
-                ctx.fillText(cell.troops.toString(), px + CELL_SIZE / 2, textY);
+                
+                if (cell.troops > 10 && !hasTopIcon) {
+                    // Large army: show swords emoji + number
+                    ctx.font = '9px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText('⚔️', px + CELL_SIZE / 2, py + 1);
+                    
+                    ctx.fillStyle = COLORS.text;
+                    ctx.font = 'bold 7px Arial';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillText(cell.troops.toString(), px + CELL_SIZE / 2, py + CELL_SIZE - 1);
+                } else if (cell.troops > 5 && !hasTopIcon) {
+                    // Medium army: show shield emoji + number
+                    ctx.font = '9px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText('🛡️', px + CELL_SIZE / 2, py + 1);
+                    
+                    ctx.fillStyle = COLORS.text;
+                    ctx.font = 'bold 7px Arial';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillText(cell.troops.toString(), px + CELL_SIZE / 2, py + CELL_SIZE - 1);
+                } else {
+                    // Small army or special building: just show number
+                    ctx.fillStyle = COLORS.text;
+                    ctx.font = 'bold 8px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = hasTopIcon ? 'bottom' : 'middle';
+                    const textY = hasTopIcon ? py + CELL_SIZE - 1 : py + CELL_SIZE / 2;
+                    ctx.fillText(cell.troops.toString(), px + CELL_SIZE / 2, textY);
+                }
             }
 
+            // Draw mountain with emoji
             if (cell.terrain === TERRAIN.MOUNTAIN) {
-                ctx.fillStyle = '#4a5568';
-                ctx.beginPath();
-                ctx.moveTo(px + CELL_SIZE / 2, py + 3);
-                ctx.lineTo(px + CELL_SIZE - 3, py + CELL_SIZE - 3);
-                ctx.lineTo(px + 3, py + CELL_SIZE - 3);
-                ctx.closePath();
-                ctx.fill();
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('⛰️', px + CELL_SIZE / 2, py + CELL_SIZE / 2);
             }
         }
     }
 
-    ctx.strokeStyle = '#0f3460';
+    // Draw grid lines with darker color
+    ctx.strokeStyle = '#1a1a2e';
     ctx.lineWidth = 1;
     for (let i = 0; i <= GRID_SIZE; i++) {
         ctx.beginPath();
