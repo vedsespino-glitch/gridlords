@@ -109,6 +109,9 @@ let isSplitMove = false;
 let playerNickname = null;
 let playerNames = {};
 
+// Mobile mode toggle state
+let mobileSplitMode = false; // When true, taps will do split moves instead of full moves
+
 // Room state
 let currentRoomId = null;
 let isHost = false;
@@ -621,12 +624,20 @@ canvas.addEventListener('click', (event) => {
             selectedCell = null;
             isSplitMove = false;
         } else if (isAdjacent(selectedCell, clickedCell)) {
-            // Play move sound when moving troops
-            AudioManager.play('move');
+            // Use mobileSplitMode if active, otherwise use isSplitMove (from double-click)
+            const useSplitMove = mobileSplitMode || isSplitMove;
+            
+            // Play appropriate sound
+            if (useSplitMove) {
+                AudioManager.play('split');
+            } else {
+                AudioManager.play('move');
+            }
+            
             socket.emit('move', {
                 from: selectedCell,
                 to: clickedCell,
-                splitMove: isSplitMove
+                splitMove: useSplitMove
             });
             selectedCell = null;
             isSplitMove = false;
@@ -781,6 +792,32 @@ if (muteBtn) {
         const isMuted = AudioManager.toggleMute();
         muteBtn.textContent = isMuted ? '🔇' : '🔈';
         muteBtn.title = isMuted ? 'Activar sonido' : 'Silenciar';
+    });
+}
+
+// Mobile mode toggle button handler
+const modeToggleBtn = document.getElementById('modeToggleBtn');
+const modeText = document.getElementById('modeText');
+if (modeToggleBtn && modeText) {
+    modeToggleBtn.addEventListener('click', () => {
+        mobileSplitMode = !mobileSplitMode;
+        
+        if (mobileSplitMode) {
+            modeText.textContent = 'DIVIDIR';
+            modeToggleBtn.classList.add('split-mode');
+            statusEl.textContent = 'Modo DIVIDIR activo - Toca para mover 50% de tropas';
+            statusEl.style.background = '#e67e22';
+        } else {
+            modeText.textContent = 'MOVER';
+            modeToggleBtn.classList.remove('split-mode');
+            statusEl.textContent = 'Modo MOVER activo - Toca para mover todas las tropas';
+            statusEl.style.background = '#3498db';
+        }
+        
+        // Play split sound as feedback when toggling to split mode
+        if (mobileSplitMode) {
+            AudioManager.play('split');
+        }
     });
 }
 
