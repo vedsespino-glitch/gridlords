@@ -1347,3 +1347,180 @@ body {
         font-size: 1.5rem;
     }
 }
+
+/* Ranking Button */
+.ranking-btn {
+    position: fixed;
+    top: 20px;
+    right: 120px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #8b4513 0%, #5d3a1a 100%);
+    border: 2px solid #ffd700;
+    color: #ffd700;
+    font-size: 1.3rem;
+    cursor: pointer;
+    z-index: 5500;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 15px rgba(139, 69, 19, 0.5);
+}
+
+.ranking-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.6);
+}
+
+/* Ranking Modal */
+.ranking-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 6000;
+    animation: fadeIn 0.3s ease;
+}
+
+.ranking-modal.hidden {
+    display: none;
+}
+
+.ranking-modal-content {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 2px solid #ffd700;
+    border-radius: 15px;
+    padding: 30px 40px;
+    max-width: 400px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+    box-shadow: 0 0 40px rgba(255, 215, 0, 0.3);
+}
+
+.close-ranking-btn {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 2rem;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.close-ranking-btn:hover {
+    color: #e94560;
+}
+
+.ranking-title {
+    color: #ffd700;
+    font-size: 1.8rem;
+    text-align: center;
+    margin-bottom: 10px;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.ranking-subtitle {
+    color: #888;
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+}
+
+.ranking-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ranking-loading {
+    text-align: center;
+    color: #888;
+    font-style: italic;
+}
+
+.ranking-empty {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 20px;
+}
+
+.ranking-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.ranking-item:hover {
+    background: rgba(139, 69, 19, 0.3);
+}
+
+.ranking-item.gold {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.2) 0%, rgba(139, 69, 19, 0.2) 100%);
+    border: 1px solid rgba(255, 215, 0, 0.5);
+}
+
+.ranking-item.silver {
+    background: linear-gradient(135deg, rgba(192, 192, 192, 0.2) 0%, rgba(128, 128, 128, 0.2) 100%);
+    border: 1px solid rgba(192, 192, 192, 0.5);
+}
+
+.ranking-item.bronze {
+    background: linear-gradient(135deg, rgba(205, 127, 50, 0.2) 0%, rgba(139, 69, 19, 0.2) 100%);
+    border: 1px solid rgba(205, 127, 50, 0.5);
+}
+
+.ranking-position {
+    font-size: 1.5rem;
+    min-width: 40px;
+    text-align: center;
+}
+
+.ranking-name {
+    flex: 1;
+    color: #fff;
+    font-weight: bold;
+    font-size: 1rem;
+    margin-left: 10px;
+}
+
+.ranking-wins {
+    color: #ffd700;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+/* Ranking responsive */
+@media screen and (max-width: 600px) {
+    .ranking-btn {
+        top: 15px;
+        right: 105px;
+        width: 35px;
+        height: 35px;
+        font-size: 1.1rem;
+    }
+    
+    .ranking-modal-content {
+        padding: 20px;
+        margin: 10px;
+    }
+    
+    .ranking-title {
+        font-size: 1.5rem;
+    }
+    
+    .ranking-item {
+        padding: 10px 12px;
+    }
+}

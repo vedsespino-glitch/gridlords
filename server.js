@@ -2,8 +2,54 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
+
+const LEADERBOARD_FILE = path.join(__dirname, 'leaderboard.json');
+
+function loadLeaderboard() {
+    try {
+        if (fs.existsSync(LEADERBOARD_FILE)) {
+            const data = fs.readFileSync(LEADERBOARD_FILE, 'utf8');
+            return JSON.parse(data);
+        }
+    } catch (err) {
+        console.error('Error loading leaderboard:', err);
+    }
+    return [];
+}
+
+function saveLeaderboard(leaderboard) {
+    try {
+        fs.writeFileSync(LEADERBOARD_FILE, JSON.stringify(leaderboard, null, 2));
+    } catch (err) {
+        console.error('Error saving leaderboard:', err);
+    }
+}
+
+function updateLeaderboard(nickname) {
+    const leaderboard = loadLeaderboard();
+    const existingPlayer = leaderboard.find(p => p.name.toLowerCase() === nickname.toLowerCase());
+    
+    if (existingPlayer) {
+        existingPlayer.wins += 1;
+        existingPlayer.name = nickname;
+    } else {
+        leaderboard.push({ name: nickname, wins: 1 });
+    }
+    
+    leaderboard.sort((a, b) => b.wins - a.wins);
+    saveLeaderboard(leaderboard);
+    
+    const playerEntry = leaderboard.find(p => p.name.toLowerCase() === nickname.toLowerCase());
+    return playerEntry ? playerEntry.wins : 1;
+}
+
+function getTopRanking(limit = 10) {
+    const leaderboard = loadLeaderboard();
+    return leaderboard.slice(0, limit);
+}
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
@@ -693,14 +739,20 @@ function checkForWinner(roomId) {
         
         if (winnerSocketId) {
             const winnerColor = roomState.players[winnerSocketId];
+            const winnerName = roomState.playerNames[winnerSocketId] || 'Unknown';
             roomState.winner = winnerColor;
+            
+            const totalWins = updateLeaderboard(winnerName);
             
             io.to(roomId).emit('gameOver', { 
                 winner: winnerColor,
+                winnerName: winnerName,
+                winnerSocketId: winnerSocketId,
+                totalWins: totalWins,
                 reason: 'last_man_standing'
             });
             
-            console.log('Game Over in room ' + roomId + '! Winner: ' + winnerColor + ' (Last Man Standing)');
+            console.log('Game Over in room ' + roomId + '! Winner: ' + winnerName + ' (' + winnerColor + ') - Victory #' + totalWins);
         }
     } else if (roomState.alivePlayers === 0) {
         roomState.winner = 'draw';
@@ -979,6 +1031,11 @@ io.on('connection', (socket) => {
             color: playerColor,
             timestamp: Date.now()
         });
+    });
+
+    socket.on('get_ranking', () => {
+        const ranking = getTopRanking(10);
+        socket.emit('ranking_data', { ranking: ranking });
     });
 });
 
