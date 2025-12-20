@@ -29,6 +29,18 @@ const leaveRoomBtn = document.getElementById('leaveRoomBtn');
 const roomInfoEl = document.getElementById('room-info');
 const currentRoomCodeEl = document.getElementById('currentRoomCode');
 
+// Chat UI elements
+const chatContainer = document.getElementById('chat-container');
+const chatMessages = document.getElementById('chat-messages');
+const chatInput = document.getElementById('chatInput');
+const sendChatBtn = document.getElementById('sendChatBtn');
+const toggleChatBtn = document.getElementById('toggleChatBtn');
+
+// Help Modal UI elements
+const helpBtn = document.getElementById('helpBtn');
+const helpModal = document.getElementById('help-modal');
+const closeHelpBtn = document.getElementById('closeHelpBtn');
+
 const GRID_SIZE = 30;
 const CELL_SIZE = 20;
 canvas.width = GRID_SIZE * CELL_SIZE;
@@ -235,6 +247,12 @@ function connectToServer(selectedClass) {
         classModal.classList.add('hidden');
         lobbyOverlay.classList.remove('hidden');
         
+        // Show chat when joining a room
+        if (chatContainer) {
+            chatContainer.classList.remove('hidden');
+            if (chatMessages) chatMessages.innerHTML = '';
+        }
+        
         // Show start button for host
         startGameBtn.classList.remove('hidden');
         startGameBtn.disabled = true; // Disabled until min players
@@ -250,6 +268,12 @@ function connectToServer(selectedClass) {
         
         classModal.classList.add('hidden');
         lobbyOverlay.classList.remove('hidden');
+        
+        // Show chat when joining a room
+        if (chatContainer) {
+            chatContainer.classList.remove('hidden');
+            if (chatMessages) chatMessages.innerHTML = '';
+        }
         
         console.log('Joined room:', data.roomId);
     });
@@ -317,6 +341,11 @@ function connectToServer(selectedClass) {
         const modeToggleBtn = document.getElementById('modeToggleBtn');
         if (modeToggleBtn) {
             modeToggleBtn.classList.remove('game-active');
+        }
+        
+        // Hide chat when leaving room
+        if (chatContainer) {
+            chatContainer.classList.add('hidden');
         }
         
         lobbyOverlay.classList.add('hidden');
@@ -485,6 +514,10 @@ function connectToServer(selectedClass) {
             'background: #ff8c00; color: white; font-weight: bold; padding: 2px 6px; border-radius: 3px;',
             'color: #ff8c00; font-weight: bold;'
         );
+    });
+
+    socket.on('new_message', (data) => {
+        addChatMessage(data.nickname, data.text, data.color);
     });
 }
 
@@ -991,3 +1024,106 @@ if (modeToggleBtn && modeText) {
 
 // Initial render (without connection - wait for login)
 render();
+
+// Chat functions
+function addChatMessage(nickname, text, color) {
+    if (!chatMessages) return;
+    
+    const messageEl = document.createElement('div');
+    messageEl.className = 'chat-message';
+    
+    const nickEl = document.createElement('span');
+    nickEl.className = 'chat-nick';
+    nickEl.style.color = COLORS[color] || '#fff';
+    nickEl.textContent = '[' + nickname + ']:';
+    
+    const textEl = document.createElement('span');
+    textEl.className = 'chat-text';
+    textEl.textContent = ' ' + text;
+    
+    messageEl.appendChild(nickEl);
+    messageEl.appendChild(textEl);
+    chatMessages.appendChild(messageEl);
+    
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function addSystemMessage(text) {
+    if (!chatMessages) return;
+    
+    const messageEl = document.createElement('div');
+    messageEl.className = 'chat-message system-message';
+    messageEl.textContent = text;
+    chatMessages.appendChild(messageEl);
+    
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function sendChatMessage() {
+    if (!socket || !chatInput) return;
+    
+    const text = chatInput.value.trim();
+    if (text.length === 0) return;
+    
+    socket.emit('send_message', { text: text });
+    chatInput.value = '';
+}
+
+function showChat() {
+    if (chatContainer) {
+        chatContainer.classList.remove('hidden');
+    }
+}
+
+function hideChat() {
+    if (chatContainer) {
+        chatContainer.classList.add('hidden');
+    }
+}
+
+// Chat event handlers
+if (sendChatBtn) {
+    sendChatBtn.addEventListener('click', sendChatMessage);
+}
+
+if (chatInput) {
+    chatInput.addEventListener('keypress', (event) => {
+        if (event.key === 'Enter') {
+            sendChatMessage();
+        }
+    });
+}
+
+if (toggleChatBtn) {
+    toggleChatBtn.addEventListener('click', () => {
+        if (chatContainer) {
+            chatContainer.classList.toggle('minimized');
+            toggleChatBtn.textContent = chatContainer.classList.contains('minimized') ? '+' : '−';
+        }
+    });
+}
+
+// Help Modal event handlers
+if (helpBtn) {
+    helpBtn.addEventListener('click', () => {
+        if (helpModal) {
+            helpModal.classList.remove('hidden');
+        }
+    });
+}
+
+if (closeHelpBtn) {
+    closeHelpBtn.addEventListener('click', () => {
+        if (helpModal) {
+            helpModal.classList.add('hidden');
+        }
+    });
+}
+
+if (helpModal) {
+    helpModal.addEventListener('click', (event) => {
+        if (event.target === helpModal) {
+            helpModal.classList.add('hidden');
+        }
+    });
+}

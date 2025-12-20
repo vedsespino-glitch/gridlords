@@ -78,11 +78,80 @@
     <!-- Mute Button -->
     <button id="muteBtn" class="mute-btn" title="Silenciar">🔈</button>
 
+    <!-- Help Button -->
+    <button id="helpBtn" class="help-btn" title="Como Jugar">?</button>
+
     <!-- Mobile Mode Toggle Button -->
     <button id="modeToggleBtn" class="mode-toggle-btn">
         <span class="mode-label">Modo:</span>
         <span id="modeText" class="mode-text">MOVER</span>
     </button>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="help-modal hidden">
+        <div class="help-modal-content">
+            <button id="closeHelpBtn" class="close-help-btn">&times;</button>
+            <h2 class="help-title">Como Jugar</h2>
+            
+            <div class="help-section">
+                <h3>Objetivo</h3>
+                <p>Elimina a los Reyes enemigos para absorber su reino y ser el ultimo superviviente.</p>
+            </div>
+            
+            <div class="help-section">
+                <h3>Unidades</h3>
+                <div class="help-unit">
+                    <span class="help-icon">🏰</span>
+                    <div>
+                        <strong>Rey (General)</strong>
+                        <p>Tu base principal. Produce +2 tropas/seg. Si muere, pierdes.</p>
+                    </div>
+                </div>
+                <div class="help-unit">
+                    <span class="help-icon">🏯</span>
+                    <div>
+                        <strong>Torre (Outpost)</strong>
+                        <p>Punto de control neutral. Produce +1 tropa/seg al capturarlo.</p>
+                    </div>
+                </div>
+                <div class="help-unit">
+                    <span class="help-icon">🧨</span>
+                    <div>
+                        <strong>Artilleria</strong>
+                        <p>Defensa. Dispara automaticamente a enemigos cercanos (5 de dano).</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="help-section">
+                <h3>Controles</h3>
+                <div class="help-controls">
+                    <div class="help-control-group">
+                        <strong>PC:</strong>
+                        <p>Clic para seleccionar → Clic para mover</p>
+                        <p>Doble Clic para dividir tropas</p>
+                    </div>
+                    <div class="help-control-group">
+                        <strong>Movil:</strong>
+                        <p>Usa el boton "Modo" para alternar entre Mover y Dividir</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Container -->
+    <div id="chat-container" class="chat-container hidden">
+        <div class="chat-header">
+            <span>Chat</span>
+            <button id="toggleChatBtn" class="toggle-chat-btn">−</button>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-container">
+            <input type="text" id="chatInput" class="chat-input" placeholder="Escribe un mensaje..." maxlength="100" autocomplete="off">
+            <button id="sendChatBtn" class="send-chat-btn">➤</button>
+        </div>
+    </div>
 
     <div id="game-container">
         <div id="header">

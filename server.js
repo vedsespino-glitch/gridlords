@@ -957,6 +957,29 @@ io.on('connection', (socket) => {
         delete socketToRoom[socket.id];
         socket.emit('leftRoom');
     });
+
+    socket.on('send_message', (data) => {
+        const roomId = getRoomIdBySocketId(socket.id);
+        if (!roomId) return;
+        
+        const roomState = rooms[roomId];
+        if (!roomState) return;
+        
+        const text = data.text;
+        if (!text || text.trim().length === 0) return;
+        
+        const nickname = roomState.playerNames[socket.id] || 'Anonimo';
+        const playerColor = roomState.players[socket.id] || 'white';
+        
+        const sanitizedText = text.trim().substring(0, 100);
+        
+        io.to(roomId).emit('new_message', {
+            nickname: nickname,
+            text: sanitizedText,
+            color: playerColor,
+            timestamp: Date.now()
+        });
+    });
 });
 
 const PORT = process.env.PORT || 3000;
