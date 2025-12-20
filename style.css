@@ -821,8 +821,8 @@ body {
 
 /* Mobile Responsive Styles */
 @media screen and (max-width: 768px) {
-    /* Show mode toggle button on mobile */
-    .mode-toggle-btn {
+    /* Show mode toggle button on mobile ONLY when game is active (via .game-active class) */
+    .mode-toggle-btn.game-active {
         display: flex;
         align-items: center;
         justify-content: center;

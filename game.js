@@ -311,6 +311,12 @@ function connectToServer(selectedClass) {
         playerColor = null;
         gameStarted = false;
         
+        // Hide mobile mode toggle button when leaving room
+        const modeToggleBtn = document.getElementById('modeToggleBtn');
+        if (modeToggleBtn) {
+            modeToggleBtn.classList.remove('game-active');
+        }
+        
         lobbyOverlay.classList.add('hidden');
         loginOverlay.classList.remove('hidden');
         roomInfoEl.classList.add('hidden');
@@ -332,6 +338,12 @@ function connectToServer(selectedClass) {
         statusEl.textContent = 'Game Started! Your turn to conquer!';
         statusEl.style.background = '#9b59b6';
         resetBtn.style.display = 'none';
+        
+        // Show mobile mode toggle button when game starts
+        const modeToggleBtn = document.getElementById('modeToggleBtn');
+        if (modeToggleBtn) {
+            modeToggleBtn.classList.add('game-active');
+        }
         
         console.log('Battle Royale started with', data.totalPlayers, 'players');
     });
@@ -360,6 +372,12 @@ function connectToServer(selectedClass) {
         gameStarted = false;
         const isWinner = data.winner === playerColor;
         const winnerName = playerNames[data.winner] || (data.winner ? data.winner.toUpperCase() : 'NADIE');
+        
+        // Hide mobile mode toggle button on game over
+        const modeToggleBtn = document.getElementById('modeToggleBtn');
+        if (modeToggleBtn) {
+            modeToggleBtn.classList.remove('game-active');
+        }
         
         // Play win or lose sound
         AudioManager.play(isWinner ? 'win' : 'lose');
@@ -395,6 +413,12 @@ function connectToServer(selectedClass) {
         resetBtn.style.display = 'none';
         gameOverOverlay.classList.add('hidden');
         
+        // Hide mobile mode toggle button on game reset
+        const modeToggleBtn = document.getElementById('modeToggleBtn');
+        if (modeToggleBtn) {
+            modeToggleBtn.classList.remove('game-active');
+        }
+        
         // Show lobby again
         lobbyOverlay.classList.remove('hidden');
         roomInfoEl.classList.add('hidden');
@@ -422,6 +446,12 @@ function connectToServer(selectedClass) {
             'background: #e74c3c; color: white; font-weight: bold; padding: 2px 6px; border-radius: 3px;',
             'color: #e74c3c; font-weight: bold;'
         );
+        
+        // Hide mobile mode toggle button when eliminated
+        const modeToggleBtn = document.getElementById('modeToggleBtn');
+        if (modeToggleBtn) {
+            modeToggleBtn.classList.remove('game-active');
+        }
         
         gameOverOverlay.classList.remove('hidden', 'victory', 'defeat');
         gameOverOverlay.classList.add('defeat');
