@@ -525,13 +525,27 @@ function render() {
             }
 
             if (selectedCell && selectedCell.x === x && selectedCell.y === y) {
-                ctx.strokeStyle = isSplitMove ? COLORS.selectedSplit : COLORS.selected;
-                ctx.lineWidth = 2;
-                if (isSplitMove) {
-                    ctx.setLineDash([3, 2]);
-                }
+                // Determine if we're in split mode (either from double-click or mobile toggle)
+                const isInSplitMode = isSplitMove || mobileSplitMode;
+                const selectionColor = isInSplitMode ? COLORS.selectedSplit : COLORS.selected;
+                
+                // Draw semi-transparent highlight overlay
+                ctx.fillStyle = isInSplitMode ? 'rgba(230, 126, 34, 0.3)' : 'rgba(241, 196, 15, 0.3)';
+                ctx.fillRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                
+                // Draw glow effect
+                ctx.save();
+                ctx.shadowColor = selectionColor;
+                ctx.shadowBlur = 8;
+                ctx.strokeStyle = selectionColor;
+                ctx.lineWidth = 3;
                 ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
-                ctx.setLineDash([]);
+                ctx.restore();
+                
+                // Draw inner bright border for extra visibility
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4);
             }
 
             if (cell.troops > 0 && cell.terrain !== TERRAIN.MOUNTAIN) {
@@ -573,8 +587,24 @@ function render() {
 
 function getCellFromMouse(event) {
     const rect = canvas.getBoundingClientRect();
-    const x = Math.floor((event.clientX - rect.left) / CELL_SIZE);
-    const y = Math.floor((event.clientY - rect.top) / CELL_SIZE);
+    
+    // Get coordinates - handle both mouse and touch events
+    let clientX, clientY;
+    if (event.touches && event.touches.length > 0) {
+        clientX = event.touches[0].clientX;
+        clientY = event.touches[0].clientY;
+    } else {
+        clientX = event.clientX;
+        clientY = event.clientY;
+    }
+    
+    // Use CSS cell size (rect.width / GRID_SIZE) instead of fixed CELL_SIZE
+    // This handles CSS-scaled canvas on mobile correctly
+    const cssCellWidth = rect.width / GRID_SIZE;
+    const cssCellHeight = rect.height / GRID_SIZE;
+    
+    const x = Math.floor((clientX - rect.left) / cssCellWidth);
+    const y = Math.floor((clientY - rect.top) / cssCellHeight);
 
     if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
         return { x, y };
@@ -611,7 +641,8 @@ function updateMatchInfo() {
     matchInfoEl.innerHTML = playerSpans.join('<span style="color: #888;"> vs </span>');
 }
 
-canvas.addEventListener('click', (event) => {
+// Unified handler for both mouse and touch input
+function handleCanvasInput(event) {
     if (!gameState || !gameStarted || gameState.winner) return;
 
     const clickedCell = getCellFromMouse(event);
@@ -621,8 +652,11 @@ canvas.addEventListener('click', (event) => {
 
     if (selectedCell) {
         if (clickedCell.x === selectedCell.x && clickedCell.y === selectedCell.y) {
+            // Tapping same cell deselects
             selectedCell = null;
             isSplitMove = false;
+            statusEl.textContent = 'Seleccion cancelada';
+            statusEl.style.background = '#9b59b6';
         } else if (isAdjacent(selectedCell, clickedCell)) {
             // Use mobileSplitMode if active, otherwise use isSplitMove (from double-click)
             const useSplitMove = mobileSplitMode || isSplitMove;
@@ -642,9 +676,14 @@ canvas.addEventListener('click', (event) => {
             selectedCell = null;
             isSplitMove = false;
         } else if (cell.owner === playerColor && cell.troops > 1) {
+            // Select a different owned cell
             selectedCell = clickedCell;
             isSplitMove = false;
+            const modeLabel = mobileSplitMode ? 'DIVIDIR' : 'MOVER';
+            statusEl.textContent = `Celda seleccionada (${modeLabel}) - Toca una celda vecina`;
+            statusEl.style.background = mobileSplitMode ? '#e67e22' : '#3498db';
         } else {
+            // Invalid target - deselect
             selectedCell = null;
             isSplitMove = false;
         }
@@ -652,10 +691,28 @@ canvas.addEventListener('click', (event) => {
         if (cell.owner === playerColor && cell.troops > 1) {
             selectedCell = clickedCell;
             isSplitMove = false;
+            const modeLabel = mobileSplitMode ? 'DIVIDIR' : 'MOVER';
+            statusEl.textContent = `Celda seleccionada (${modeLabel}) - Toca una celda vecina`;
+            statusEl.style.background = mobileSplitMode ? '#e67e22' : '#3498db';
         }
     }
 
     render();
+}
+
+// Use pointerdown for unified mouse/touch handling (better mobile support)
+canvas.addEventListener('pointerdown', (event) => {
+    // Prevent default to avoid double-firing on touch devices
+    event.preventDefault();
+    handleCanvasInput(event);
+});
+
+// Fallback click handler for older browsers
+canvas.addEventListener('click', (event) => {
+    // Only handle if pointerdown didn't fire (older browsers)
+    if (!window.PointerEvent) {
+        handleCanvasInput(event);
+    }
 });
 
 canvas.addEventListener('dblclick', (event) => {
