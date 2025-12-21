@@ -227,7 +227,7 @@ const AudioManager = {
         win: 'https://cdn.pixabay.com/audio/2021/08/04/audio_12b0c7443c.mp3',       // Victory fanfare
         lose: 'https://cdn.pixabay.com/audio/2022/03/15/audio_942694a069.mp3',      // Game over sound
         alarm: 'https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a73467.mp3',     // Under attack (uses attack sound)
-        radar: 'https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a73467.mp3'      // Enemy spotted (uses attack sound)
+        radar: 'https://cdn.pixabay.com/audio/2021/08/04/audio_12b0c7443c.mp3'      // Enemy spotted (uses victory fanfare)
     },
     
     init: function() {
