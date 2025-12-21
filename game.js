@@ -50,16 +50,16 @@ const rankingList = document.getElementById('ranking-list');
 const GRID_SIZE = 30;
 
 // Zoom configuration
-const MIN_CELL_SIZE = 15;
-const MAX_CELL_SIZE = 40;
+const MIN_CELL_SIZE = 20;
+const MAX_CELL_SIZE = 50;
 const DEFAULT_CELL_SIZE_PC = 25;
-const DEFAULT_CELL_SIZE_MOBILE = 20;
-const ZOOM_STEP = 2;
+const DEFAULT_CELL_SIZE_MOBILE = 35;
+const ZOOM_STEP = 5;
 
 // Detect if mobile device
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
 
-// Set initial cell size based on device
+// Set initial cell size based on device (35px minimum for mobile for touch-friendly cells)
 let cellSize = isMobile ? DEFAULT_CELL_SIZE_MOBILE : DEFAULT_CELL_SIZE_PC;
 
 // Update canvas size based on current cell size
@@ -1265,24 +1265,27 @@ if (rankingModal) {
     });
 }
 
-// Zoom functionality with mouse wheel
-function handleZoom(event) {
-    event.preventDefault();
-    
-    const delta = event.deltaY;
-    
-    if (delta < 0) {
-        // Zoom in (scroll up)
-        cellSize = Math.min(cellSize + ZOOM_STEP, MAX_CELL_SIZE);
-    } else {
-        // Zoom out (scroll down)
-        cellSize = Math.max(cellSize - ZOOM_STEP, MIN_CELL_SIZE);
-    }
-    
-    // Update canvas size and re-render
+// Zoom functionality with buttons
+function zoomIn() {
+    cellSize = Math.min(cellSize + ZOOM_STEP, MAX_CELL_SIZE);
     updateCanvasSize();
     render();
 }
 
-// Add wheel event listener to canvas for zoom
-canvas.addEventListener('wheel', handleZoom, { passive: false });
+function zoomOut() {
+    cellSize = Math.max(cellSize - ZOOM_STEP, MIN_CELL_SIZE);
+    updateCanvasSize();
+    render();
+}
+
+// Zoom button event listeners
+const zoomInBtn = document.getElementById('zoomInBtn');
+const zoomOutBtn = document.getElementById('zoomOutBtn');
+
+if (zoomInBtn) {
+    zoomInBtn.addEventListener('click', zoomIn);
+}
+
+if (zoomOutBtn) {
+    zoomOutBtn.addEventListener('click', zoomOut);
+}
