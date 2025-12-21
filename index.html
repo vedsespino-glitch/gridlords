@@ -77,6 +77,8 @@
 
     <!-- Floating Controls Container -->
     <div id="floating-controls" class="floating-controls">
+        <button id="zoomInBtn" class="floating-btn" title="Zoom In">➕</button>
+        <button id="zoomOutBtn" class="floating-btn" title="Zoom Out">➖</button>
         <button id="rankingBtn" class="floating-btn" title="Ranking">🏆</button>
         <button id="helpBtn" class="floating-btn" title="Como Jugar">?</button>
         <button id="muteBtn" class="floating-btn" title="Silenciar">🔈</button>
@@ -176,11 +178,6 @@
             <div id="player-info"></div>
         </div>
         <canvas id="gameCanvas"></canvas>
-        <div id="instructions">
-            <p><strong>How to Play:</strong></p>
-            <p>Click on your cell, then click an adjacent cell to move troops.</p>
-            <p>Capture the enemy General to win!</p>
-        </div>
         <button id="resetBtn" style="display: none;">New Game</button>
     </div>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
