@@ -223,7 +223,8 @@ const AudioManager = {
         cannon: 'https://cdn.pixabay.com/audio/2022/03/15/audio_8cb749bf56.mp3',    // Explosion sound
         split: 'https://cdn.pixabay.com/audio/2021/08/04/audio_0625c1539c.mp3',     // Whoosh/cut sound
         win: 'https://cdn.pixabay.com/audio/2021/08/04/audio_12b0c7443c.mp3',       // Victory fanfare
-        lose: 'https://cdn.pixabay.com/audio/2022/03/15/audio_942694a069.mp3'       // Game over sound
+        lose: 'https://cdn.pixabay.com/audio/2022/03/15/audio_942694a069.mp3',      // Game over sound
+        alarm: 'https://cdn.pixabay.com/audio/2022/03/24/audio_8bfed9d0e5.mp3'      // Under attack alarm
     },
     
     init: function() {
@@ -266,6 +267,32 @@ const AudioManager = {
 
 // Track previous game state for detecting changes
 let previousGameState = null;
+
+// Under attack alert cooldown (5 seconds)
+let lastUnderAttackAlert = 0;
+const UNDER_ATTACK_COOLDOWN = 5000;
+
+// Function to trigger under attack alert
+function triggerUnderAttackAlert() {
+    const now = Date.now();
+    if (now - lastUnderAttackAlert < UNDER_ATTACK_COOLDOWN) {
+        return; // Still in cooldown
+    }
+    lastUnderAttackAlert = now;
+    
+    // Play alarm sound
+    AudioManager.play('alarm');
+    
+    // Add visual effect
+    const gameContainer = document.getElementById('game-container');
+    if (gameContainer) {
+        gameContainer.classList.add('under-attack');
+        // Remove the class after animation completes
+        setTimeout(() => {
+            gameContainer.classList.remove('under-attack');
+        }, 1000);
+    }
+}
 
 function connectToServer(selectedClass) {
     playerClass = selectedClass;
@@ -463,19 +490,31 @@ function connectToServer(selectedClass) {
 
     socket.on('gameState', (state) => {
         // Detect ownership changes (attacks) by comparing with previous state
+        let playerLostCell = false;
         if (previousGameState && previousGameState.grid && state.grid) {
             for (let y = 0; y < state.grid.length; y++) {
                 for (let x = 0; x < state.grid[y].length; x++) {
                     const prevCell = previousGameState.grid[y][x];
                     const newCell = state.grid[y][x];
+                    
                     // If cell changed owner and new owner is the player, play attack sound
                     if (prevCell && newCell && prevCell.owner !== newCell.owner && newCell.owner === playerColor) {
                         AudioManager.play('attack');
-                        break;
+                    }
+                    
+                    // If player lost a cell (was theirs, now belongs to enemy), trigger under attack alert
+                    if (prevCell && newCell && prevCell.owner === playerColor && newCell.owner !== playerColor && newCell.owner !== null) {
+                        playerLostCell = true;
                     }
                 }
             }
         }
+        
+        // Trigger under attack alert if player lost any cells
+        if (playerLostCell && gameStarted) {
+            triggerUnderAttackAlert();
+        }
+        
         previousGameState = JSON.parse(JSON.stringify(state));
         gameState = state;
         render();
