@@ -224,7 +224,8 @@ const AudioManager = {
         split: 'https://cdn.pixabay.com/audio/2021/08/04/audio_0625c1539c.mp3',     // Whoosh/cut sound
         win: 'https://cdn.pixabay.com/audio/2021/08/04/audio_12b0c7443c.mp3',       // Victory fanfare
         lose: 'https://cdn.pixabay.com/audio/2022/03/15/audio_942694a069.mp3',      // Game over sound
-        alarm: 'https://cdn.pixabay.com/audio/2022/03/24/audio_8bfed9d0e5.mp3'      // Under attack alarm
+        alarm: 'https://cdn.pixabay.com/audio/2022/03/24/audio_8bfed9d0e5.mp3',     // Under attack alarm
+        radar: 'https://cdn.pixabay.com/audio/2022/03/15/audio_8cb749bf56.mp3'      // Enemy spotted radar ping
     },
     
     init: function() {
@@ -292,6 +293,63 @@ function triggerUnderAttackAlert() {
             gameContainer.classList.remove('under-attack');
         }, 1000);
     }
+}
+
+// Enemy spotted alert cooldown (10 seconds)
+let lastEnemySpottedAlert = 0;
+const ENEMY_SPOTTED_COOLDOWN = 10000;
+let previouslyHadVisibleEnemies = false;
+
+// Function to trigger enemy spotted alert
+function triggerEnemySpottedAlert() {
+    const now = Date.now();
+    if (now - lastEnemySpottedAlert < ENEMY_SPOTTED_COOLDOWN) {
+        return; // Still in cooldown
+    }
+    lastEnemySpottedAlert = now;
+    
+    // Play radar ping sound
+    AudioManager.play('radar');
+    
+    // Add visual effect (orange flash)
+    const gameContainer = document.getElementById('game-container');
+    if (gameContainer) {
+        gameContainer.classList.add('enemy-spotted');
+        // Remove the class after animation completes
+        setTimeout(() => {
+            gameContainer.classList.remove('enemy-spotted');
+        }, 1000);
+    }
+}
+
+// Function to check for visible enemies and trigger alert if needed
+function checkForVisibleEnemies(state) {
+    if (!state || !state.grid || !playerColor || !gameStarted) {
+        return;
+    }
+    
+    let hasVisibleEnemies = false;
+    
+    // Check all visible cells for enemy presence
+    for (let y = 0; y < state.grid.length; y++) {
+        for (let x = 0; x < state.grid[y].length; x++) {
+            const cell = state.grid[y][x];
+            // Cell is visible (not in fog) and belongs to an enemy
+            if (cell && cell.owner && cell.owner !== playerColor) {
+                hasVisibleEnemies = true;
+                break;
+            }
+        }
+        if (hasVisibleEnemies) break;
+    }
+    
+    // Trigger alert if we just spotted enemies (weren't visible before, now they are)
+    if (hasVisibleEnemies && !previouslyHadVisibleEnemies) {
+        triggerEnemySpottedAlert();
+    }
+    
+    // Update state for next check
+    previouslyHadVisibleEnemies = hasVisibleEnemies;
 }
 
 function connectToServer(selectedClass) {
@@ -514,6 +572,9 @@ function connectToServer(selectedClass) {
         if (playerLostCell && gameStarted) {
             triggerUnderAttackAlert();
         }
+        
+        // Check for visible enemies and trigger alert if newly spotted
+        checkForVisibleEnemies(state);
         
         previousGameState = JSON.parse(JSON.stringify(state));
         gameState = state;
