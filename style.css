@@ -373,13 +373,17 @@ body {
 }
 
 .login-title {
-    font-size: 4.5rem;
+    font-size: clamp(1.2rem, 6vw, 4.5rem);
     font-weight: 900;
     color: #e94560;
     text-shadow: 0 0 30px rgba(233, 69, 96, 0.8), 0 0 60px rgba(233, 69, 96, 0.4);
     margin-bottom: 10px;
-    letter-spacing: 8px;
+    letter-spacing: clamp(1px, 0.5vw, 8px);
     animation: pulse 2s infinite;
+    width: 100%;
+    text-align: center;
+    max-width: 100%;
+    white-space: nowrap;
 }
 
 .login-subtitle {
@@ -398,9 +402,12 @@ body {
 }
 
 .nickname-input {
-    width: 300px;
+    width: 90%;
+    max-width: 300px;
     padding: 15px 25px;
     font-size: 1.2rem;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    letter-spacing: normal;
     background: rgba(255, 255, 255, 0.1);
     border: 2px solid #444;
     border-radius: 10px;
@@ -408,6 +415,7 @@ body {
     text-align: center;
     outline: none;
     transition: all 0.3s ease;
+    margin-bottom: 15px;
 }
 
 .nickname-input::placeholder {
@@ -500,8 +508,9 @@ body {
 
 .room-code-input {
     width: 120px;
-    padding: 12px 15px;
+    padding: 14px 15px;
     font-size: 1.2rem;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: rgba(255, 255, 255, 0.1);
     border: 2px solid #444;
     border-radius: 10px;
@@ -511,6 +520,7 @@ body {
     outline: none;
     transition: all 0.3s ease;
     letter-spacing: 3px;
+    min-height: 44px;
 }
 
 .room-code-input::placeholder {
@@ -927,8 +937,8 @@ body {
     }
     
     .login-title {
-        font-size: 2.5rem;
-        letter-spacing: 4px;
+        /* font-size handled by clamp() in base styles */
+        animation: none; /* Disable pulse on mobile to prevent overflow */
     }
     
     .login-subtitle {
@@ -937,10 +947,12 @@ body {
     }
     
     .nickname-input {
-        width: 100%;
+        width: 90%;
         max-width: 280px;
-        font-size: 1rem;
-        padding: 12px 20px;
+        font-size: 16px; /* Prevents iOS zoom on focus */
+        padding: 14px 20px;
+        min-height: 44px;
+        margin-bottom: 15px;
     }
     
     .room-btn {
@@ -951,8 +963,9 @@ body {
     
     .room-code-input {
         width: 100px;
-        font-size: 1rem;
-        padding: 10px 12px;
+        font-size: 16px; /* Prevents iOS zoom on focus */
+        padding: 12px 12px;
+        min-height: 44px;
     }
     
     /* Lobby overlay adjustments */
@@ -1036,12 +1049,12 @@ body {
 /* Extra small screens */
 @media screen and (max-width: 400px) {
     .login-title {
-        font-size: 2rem;
-        letter-spacing: 2px;
+        /* font-size handled by clamp() in base styles */
+        animation: none; /* Disable pulse on small screens */
     }
     
     #header h1 {
-        font-size: 1.5rem;
+        font-size: clamp(1rem, 5vw, 1.5rem);
     }
     
     .mode-toggle-btn {
