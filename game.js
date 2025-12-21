@@ -68,6 +68,13 @@ function updateCanvasSize() {
     canvas.height = GRID_SIZE * cellSize;
 }
 
+// Calculate scaled font size based on cell size (baseline is 20px cell)
+const BASE_CELL_SIZE = 20;
+function getScaledFontSize(baseFontSize) {
+    const scale = cellSize / BASE_CELL_SIZE;
+    return Math.floor(baseFontSize * scale) + 'px';
+}
+
 // Initialize canvas size
 updateCanvasSize();
 
@@ -593,7 +600,7 @@ function render() {
                 
                 // Draw question mark for mystery
                 ctx.fillStyle = '#333333';
-                ctx.font = 'bold 8px Arial';
+                ctx.font = 'bold ' + getScaledFontSize(8) + ' Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText('?', px + cellSize / 2, py + cellSize / 2);
@@ -643,7 +650,7 @@ function render() {
                 ctx.restore();
                 
                 // Draw castle emoji (larger)
-                ctx.font = '12px Arial';
+                ctx.font = getScaledFontSize(12) + ' Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.fillText('🏰', px + cellSize / 2, py + 1);
@@ -660,7 +667,7 @@ function render() {
                 ctx.restore();
                 
                 // Draw tower emoji
-                ctx.font = '11px Arial';
+                ctx.font = getScaledFontSize(11) + ' Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.fillText('🏯', px + cellSize / 2, py + 1);
@@ -677,7 +684,7 @@ function render() {
                 ctx.restore();
                 
                 // Draw cannon/bomb emoji
-                ctx.font = '11px Arial';
+                ctx.font = getScaledFontSize(11) + ' Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.fillText('🧨', px + cellSize / 2, py + 1);
@@ -713,30 +720,30 @@ function render() {
                 
                 if (cell.troops > 10 && !hasTopIcon) {
                     // Large army: show swords emoji + number
-                    ctx.font = '9px Arial';
+                    ctx.font = getScaledFontSize(9) + ' Arial';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'top';
                     ctx.fillText('⚔️', px + cellSize / 2, py + 1);
                     
                     ctx.fillStyle = COLORS.text;
-                    ctx.font = 'bold 7px Arial';
+                    ctx.font = 'bold ' + getScaledFontSize(7) + ' Arial';
                     ctx.textBaseline = 'bottom';
                     ctx.fillText(cell.troops.toString(), px + cellSize / 2, py + cellSize - 1);
                 } else if (cell.troops > 5 && !hasTopIcon) {
                     // Medium army: show shield emoji + number
-                    ctx.font = '9px Arial';
+                    ctx.font = getScaledFontSize(9) + ' Arial';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'top';
                     ctx.fillText('🛡️', px + cellSize / 2, py + 1);
                     
                     ctx.fillStyle = COLORS.text;
-                    ctx.font = 'bold 7px Arial';
+                    ctx.font = 'bold ' + getScaledFontSize(7) + ' Arial';
                     ctx.textBaseline = 'bottom';
                     ctx.fillText(cell.troops.toString(), px + cellSize / 2, py + cellSize - 1);
                 } else {
                     // Small army or special building: just show number
                     ctx.fillStyle = COLORS.text;
-                    ctx.font = 'bold 8px Arial';
+                    ctx.font = 'bold ' + getScaledFontSize(8) + ' Arial';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = hasTopIcon ? 'bottom' : 'middle';
                     const textY = hasTopIcon ? py + cellSize - 1 : py + cellSize / 2;
@@ -746,7 +753,7 @@ function render() {
 
             // Draw mountain with emoji
             if (cell.terrain === TERRAIN.MOUNTAIN) {
-                ctx.font = '12px Arial';
+                ctx.font = getScaledFontSize(12) + ' Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText('⛰️', px + cellSize / 2, py + cellSize / 2);
