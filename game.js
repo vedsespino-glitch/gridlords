@@ -75,6 +75,51 @@ function getScaledFontSize(baseFontSize) {
     return Math.floor(baseFontSize * scale) + 'px';
 }
 
+// Center camera on player's General/King at game start
+let hasCenteredOnPlayer = false;
+function centerCameraOnPlayer() {
+    if (!gameState || !gameState.grid || !playerColor) return;
+    
+    const gameContainer = document.getElementById('game-container');
+    if (!gameContainer) return;
+    
+    // Find the player's General position
+    let generalX = -1;
+    let generalY = -1;
+    
+    for (let y = 0; y < gameState.grid.length; y++) {
+        for (let x = 0; x < gameState.grid[y].length; x++) {
+            const cell = gameState.grid[y][x];
+            if (cell.unit === 'general' && cell.owner === playerColor) {
+                generalX = x;
+                generalY = y;
+                break;
+            }
+        }
+        if (generalX !== -1) break;
+    }
+    
+    if (generalX === -1 || generalY === -1) return;
+    
+    // Calculate pixel position of the General
+    const pixelX = generalX * cellSize;
+    const pixelY = generalY * cellSize;
+    
+    // Calculate scroll position to center the General in the viewport
+    const containerWidth = gameContainer.clientWidth;
+    const containerHeight = gameContainer.clientHeight;
+    
+    const scrollX = Math.max(0, pixelX - containerWidth / 2 + cellSize / 2);
+    const scrollY = Math.max(0, pixelY - containerHeight / 2 + cellSize / 2);
+    
+    // Smooth scroll to the General's position
+    gameContainer.scrollTo({
+        left: scrollX,
+        top: scrollY,
+        behavior: 'smooth'
+    });
+}
+
 // Initialize canvas size
 updateCanvasSize();
 
@@ -368,6 +413,7 @@ function connectToServer(selectedClass) {
         gameState = null;
         playerColor = null;
         gameStarted = false;
+        hasCenteredOnPlayer = false;
         
         // Hide mobile mode toggle button when leaving room
         const modeToggleBtn = document.getElementById('modeToggleBtn');
@@ -429,6 +475,12 @@ function connectToServer(selectedClass) {
         previousGameState = JSON.parse(JSON.stringify(state));
         gameState = state;
         render();
+        
+        // Center camera on player's General at game start (only once)
+        if (gameStarted && !hasCenteredOnPlayer) {
+            hasCenteredOnPlayer = true;
+            setTimeout(() => centerCameraOnPlayer(), 100);
+        }
     });
 
     socket.on('gameOver', (data) => {
@@ -483,6 +535,7 @@ function connectToServer(selectedClass) {
         selectedCell = null;
         isSplitMove = false;
         gameStarted = false;
+        hasCenteredOnPlayer = false;
         statusEl.textContent = 'Game Reset! Waiting for players...';
         statusEl.style.background = '#f39c12';
         resetBtn.style.display = 'none';
