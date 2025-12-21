@@ -766,32 +766,41 @@ body {
     color: #a569bd;
 }
 
-/* Mute Button */
-.mute-btn {
+/* Floating Controls Container */
+.floating-controls {
     position: fixed;
-    top: 20px;
+    bottom: 20px;
     right: 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    z-index: 6000;
+}
+
+/* Unified Floating Button Style */
+.floating-btn {
     width: 50px;
     height: 50px;
-    font-size: 1.5rem;
-    background: rgba(0, 0, 0, 0.6);
-    border: 2px solid #444;
     border-radius: 50%;
+    background: linear-gradient(135deg, #8b4513 0%, #5d3a1a 100%);
+    border: 2px solid #ffd700;
+    color: #ffd700;
+    font-size: 1.5rem;
+    font-weight: bold;
     cursor: pointer;
-    z-index: 6000;
     transition: all 0.3s ease;
     display: flex;
     justify-content: center;
     align-items: center;
+    box-shadow: 0 0 15px rgba(139, 69, 19, 0.5);
 }
 
-.mute-btn:hover {
-    background: rgba(233, 69, 96, 0.3);
-    border-color: #e94560;
+.floating-btn:hover {
     transform: scale(1.1);
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.6);
 }
 
-.mute-btn:active {
+.floating-btn:active {
     transform: scale(0.95);
 }
 
@@ -888,15 +897,6 @@ body {
     /* Instructions hidden on mobile to save space */
     #instructions {
         display: none;
-    }
-    
-    /* Mute button smaller on mobile */
-    .mute-btn {
-        width: 40px;
-        height: 40px;
-        font-size: 1.2rem;
-        top: 10px;
-        right: 10px;
     }
     
     /* Login overlay adjustments */
@@ -1041,29 +1041,6 @@ body {
     -webkit-tap-highlight-color: transparent;
 }
 
-/* Help Button */
-.help-btn {
-    position: fixed;
-    top: 20px;
-    right: 70px;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #8b4513 0%, #5d3a1a 100%);
-    border: 2px solid #ffd700;
-    color: #ffd700;
-    font-size: 1.5rem;
-    font-weight: bold;
-    cursor: pointer;
-    z-index: 5500;
-    transition: all 0.3s ease;
-    box-shadow: 0 0 15px rgba(139, 69, 19, 0.5);
-}
-
-.help-btn:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 25px rgba(255, 215, 0, 0.6);
-}
 
 /* Help Modal */
 .help-modal {
@@ -1329,14 +1306,6 @@ body {
         min-height: 80px;
     }
     
-    .help-btn {
-        top: 15px;
-        right: 60px;
-        width: 35px;
-        height: 35px;
-        font-size: 1.2rem;
-    }
-    
     .help-modal-content {
         padding: 20px;
         margin: 10px;
@@ -1346,29 +1315,6 @@ body {
     .help-title {
         font-size: 1.5rem;
     }
-}
-
-/* Ranking Button */
-.ranking-btn {
-    position: fixed;
-    top: 20px;
-    right: 120px;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #8b4513 0%, #5d3a1a 100%);
-    border: 2px solid #ffd700;
-    color: #ffd700;
-    font-size: 1.3rem;
-    cursor: pointer;
-    z-index: 5500;
-    transition: all 0.3s ease;
-    box-shadow: 0 0 15px rgba(139, 69, 19, 0.5);
-}
-
-.ranking-btn:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 25px rgba(255, 215, 0, 0.6);
 }
 
 /* Ranking Modal */
@@ -1503,12 +1449,16 @@ body {
 
 /* Ranking responsive */
 @media screen and (max-width: 600px) {
-    .ranking-btn {
-        top: 15px;
-        right: 105px;
-        width: 35px;
-        height: 35px;
-        font-size: 1.1rem;
+    .floating-controls {
+        bottom: 15px;
+        right: 15px;
+        gap: 8px;
+    }
+    
+    .floating-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
     }
     
     .ranking-modal-content {
