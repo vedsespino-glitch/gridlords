@@ -48,9 +48,28 @@ const closeRankingBtn = document.getElementById('closeRankingBtn');
 const rankingList = document.getElementById('ranking-list');
 
 const GRID_SIZE = 30;
-const CELL_SIZE = 20;
-canvas.width = GRID_SIZE * CELL_SIZE;
-canvas.height = GRID_SIZE * CELL_SIZE;
+
+// Zoom configuration
+const MIN_CELL_SIZE = 15;
+const MAX_CELL_SIZE = 40;
+const DEFAULT_CELL_SIZE_PC = 25;
+const DEFAULT_CELL_SIZE_MOBILE = 20;
+const ZOOM_STEP = 2;
+
+// Detect if mobile device
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+
+// Set initial cell size based on device
+let cellSize = isMobile ? DEFAULT_CELL_SIZE_MOBILE : DEFAULT_CELL_SIZE_PC;
+
+// Update canvas size based on current cell size
+function updateCanvasSize() {
+    canvas.width = GRID_SIZE * cellSize;
+    canvas.height = GRID_SIZE * cellSize;
+}
+
+// Initialize canvas size
+updateCanvasSize();
 
 const COLORS = {
     empty: '#1a1a1a',
@@ -552,24 +571,24 @@ function render() {
     for (let y = 0; y < GRID_SIZE; y++) {
         for (let x = 0; x < GRID_SIZE; x++) {
             const cell = gameState.grid[y][x];
-            const px = x * CELL_SIZE;
-            const py = y * CELL_SIZE;
+            const px = x * cellSize;
+            const py = y * cellSize;
 
             // Draw fog of war with subtle pattern
             if (cell.isFog) {
                 ctx.fillStyle = COLORS.fog;
-                ctx.fillRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.fillRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
                 
                 // Add subtle diagonal pattern for "unknown" effect
                 ctx.strokeStyle = COLORS.fogPattern;
                 ctx.lineWidth = 0.5;
                 ctx.beginPath();
-                ctx.moveTo(px + 1, py + CELL_SIZE - 1);
-                ctx.lineTo(px + CELL_SIZE - 1, py + 1);
+                ctx.moveTo(px + 1, py + cellSize - 1);
+                ctx.lineTo(px + cellSize - 1, py + 1);
                 ctx.stroke();
                 ctx.beginPath();
-                ctx.moveTo(px + CELL_SIZE / 2, py + CELL_SIZE - 1);
-                ctx.lineTo(px + CELL_SIZE - 1, py + CELL_SIZE / 2);
+                ctx.moveTo(px + cellSize / 2, py + cellSize - 1);
+                ctx.lineTo(px + cellSize - 1, py + cellSize / 2);
                 ctx.stroke();
                 
                 // Draw question mark for mystery
@@ -577,7 +596,7 @@ function render() {
                 ctx.font = 'bold 8px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText('?', px + CELL_SIZE / 2, py + CELL_SIZE / 2);
+                ctx.fillText('?', px + cellSize / 2, py + cellSize / 2);
                 continue;
             }
 
@@ -599,7 +618,7 @@ function render() {
 
             // Draw base cell color
             ctx.fillStyle = fillColor;
-            ctx.fillRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+            ctx.fillRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
 
             // Add glowing border for conquered territory
             if (hasOwner && cell.terrain !== TERRAIN.OUTPOST && cell.terrain !== TERRAIN.ARTILLERY && cell.unit !== 'general') {
@@ -608,7 +627,7 @@ function render() {
                 ctx.shadowBlur = 3;
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
                 ctx.lineWidth = 1;
-                ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.strokeRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
                 ctx.restore();
             }
 
@@ -620,14 +639,14 @@ function render() {
                 ctx.shadowBlur = 6;
                 ctx.strokeStyle = COLORS.general;
                 ctx.lineWidth = 2;
-                ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.strokeRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
                 ctx.restore();
                 
                 // Draw castle emoji (larger)
                 ctx.font = '12px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
-                ctx.fillText('🏰', px + CELL_SIZE / 2, py + 1);
+                ctx.fillText('🏰', px + cellSize / 2, py + 1);
             }
 
             // Draw Outpost (Tower) with fort emoji
@@ -637,14 +656,14 @@ function render() {
                 ctx.shadowBlur = 4;
                 ctx.strokeStyle = COLORS.outpostBorder;
                 ctx.lineWidth = 2;
-                ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.strokeRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
                 ctx.restore();
                 
                 // Draw tower emoji
                 ctx.font = '11px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
-                ctx.fillText('🏯', px + CELL_SIZE / 2, py + 1);
+                ctx.fillText('🏯', px + cellSize / 2, py + 1);
             }
 
             // Draw Artillery with cannon emoji
@@ -654,14 +673,14 @@ function render() {
                 ctx.shadowBlur = 4;
                 ctx.strokeStyle = COLORS.artilleryBorder;
                 ctx.lineWidth = 2;
-                ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.strokeRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
                 ctx.restore();
                 
                 // Draw cannon/bomb emoji
                 ctx.font = '11px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
-                ctx.fillText('🧨', px + CELL_SIZE / 2, py + 1);
+                ctx.fillText('🧨', px + cellSize / 2, py + 1);
             }
 
             // Draw selection highlight
@@ -671,7 +690,7 @@ function render() {
                 
                 // Draw semi-transparent highlight overlay
                 ctx.fillStyle = isInSplitMode ? 'rgba(230, 126, 34, 0.4)' : 'rgba(241, 196, 15, 0.4)';
-                ctx.fillRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.fillRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
                 
                 // Draw animated glow effect
                 ctx.save();
@@ -679,13 +698,13 @@ function render() {
                 ctx.shadowBlur = 10;
                 ctx.strokeStyle = selectionColor;
                 ctx.lineWidth = 3;
-                ctx.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.strokeRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
                 ctx.restore();
                 
                 // Draw inner bright border
                 ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 1;
-                ctx.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                ctx.strokeRect(px + 2, py + 2, cellSize - 4, cellSize - 4);
             }
 
             // Draw troops with army icons for large armies
@@ -697,31 +716,31 @@ function render() {
                     ctx.font = '9px Arial';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'top';
-                    ctx.fillText('⚔️', px + CELL_SIZE / 2, py + 1);
+                    ctx.fillText('⚔️', px + cellSize / 2, py + 1);
                     
                     ctx.fillStyle = COLORS.text;
                     ctx.font = 'bold 7px Arial';
                     ctx.textBaseline = 'bottom';
-                    ctx.fillText(cell.troops.toString(), px + CELL_SIZE / 2, py + CELL_SIZE - 1);
+                    ctx.fillText(cell.troops.toString(), px + cellSize / 2, py + cellSize - 1);
                 } else if (cell.troops > 5 && !hasTopIcon) {
                     // Medium army: show shield emoji + number
                     ctx.font = '9px Arial';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'top';
-                    ctx.fillText('🛡️', px + CELL_SIZE / 2, py + 1);
+                    ctx.fillText('🛡️', px + cellSize / 2, py + 1);
                     
                     ctx.fillStyle = COLORS.text;
                     ctx.font = 'bold 7px Arial';
                     ctx.textBaseline = 'bottom';
-                    ctx.fillText(cell.troops.toString(), px + CELL_SIZE / 2, py + CELL_SIZE - 1);
+                    ctx.fillText(cell.troops.toString(), px + cellSize / 2, py + cellSize - 1);
                 } else {
                     // Small army or special building: just show number
                     ctx.fillStyle = COLORS.text;
                     ctx.font = 'bold 8px Arial';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = hasTopIcon ? 'bottom' : 'middle';
-                    const textY = hasTopIcon ? py + CELL_SIZE - 1 : py + CELL_SIZE / 2;
-                    ctx.fillText(cell.troops.toString(), px + CELL_SIZE / 2, textY);
+                    const textY = hasTopIcon ? py + cellSize - 1 : py + cellSize / 2;
+                    ctx.fillText(cell.troops.toString(), px + cellSize / 2, textY);
                 }
             }
 
@@ -730,7 +749,7 @@ function render() {
                 ctx.font = '12px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText('⛰️', px + CELL_SIZE / 2, py + CELL_SIZE / 2);
+                ctx.fillText('⛰️', px + cellSize / 2, py + cellSize / 2);
             }
         }
     }
@@ -740,13 +759,13 @@ function render() {
     ctx.lineWidth = 1;
     for (let i = 0; i <= GRID_SIZE; i++) {
         ctx.beginPath();
-        ctx.moveTo(i * CELL_SIZE, 0);
-        ctx.lineTo(i * CELL_SIZE, canvas.height);
+        ctx.moveTo(i * cellSize, 0);
+        ctx.lineTo(i * cellSize, canvas.height);
         ctx.stroke();
 
         ctx.beginPath();
-        ctx.moveTo(0, i * CELL_SIZE);
-        ctx.lineTo(canvas.width, i * CELL_SIZE);
+        ctx.moveTo(0, i * cellSize);
+        ctx.lineTo(canvas.width, i * cellSize);
         ctx.stroke();
     }
 }
@@ -764,7 +783,7 @@ function getCellFromMouse(event) {
         clientY = event.clientY;
     }
     
-    // Use CSS cell size (rect.width / GRID_SIZE) instead of fixed CELL_SIZE
+    // Use CSS cell size (rect.width / GRID_SIZE) instead of fixed cellSize
     // This handles CSS-scaled canvas on mobile correctly
     const cssCellWidth = rect.width / GRID_SIZE;
     const cssCellHeight = rect.height / GRID_SIZE;
@@ -1245,3 +1264,25 @@ if (rankingModal) {
         }
     });
 }
+
+// Zoom functionality with mouse wheel
+function handleZoom(event) {
+    event.preventDefault();
+    
+    const delta = event.deltaY;
+    
+    if (delta < 0) {
+        // Zoom in (scroll up)
+        cellSize = Math.min(cellSize + ZOOM_STEP, MAX_CELL_SIZE);
+    } else {
+        // Zoom out (scroll down)
+        cellSize = Math.max(cellSize - ZOOM_STEP, MIN_CELL_SIZE);
+    }
+    
+    // Update canvas size and re-render
+    updateCanvasSize();
+    render();
+}
+
+// Add wheel event listener to canvas for zoom
+canvas.addEventListener('wheel', handleZoom, { passive: false });
