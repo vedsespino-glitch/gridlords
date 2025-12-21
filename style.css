@@ -1532,3 +1532,28 @@ body {
         padding: 10px 12px;
     }
 }
+
+/* Emergency Fix: Input fields with high contrast for mobile readability */
+#nicknameInput,
+#roomIdInput,
+.nickname-input,
+.room-code-input {
+    width: 80% !important;
+    max-width: 300px !important;
+    height: 50px !important;
+    min-height: 50px !important;
+    background-color: rgba(255, 255, 255, 0.9) !important;
+    color: black !important;
+    font-family: sans-serif !important;
+    font-size: 16px !important;
+    padding: 12px 15px !important;
+    border: 2px solid #444 !important;
+    border-radius: 10px !important;
+}
+
+#nicknameInput::placeholder,
+#roomIdInput::placeholder,
+.nickname-input::placeholder,
+.room-code-input::placeholder {
+    color: #666 !important;
+}
