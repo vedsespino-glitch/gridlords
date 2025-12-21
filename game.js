@@ -6,6 +6,7 @@ const resetBtn = document.getElementById('resetBtn');
 const classModal = document.getElementById('class-modal');
 const tankBtn = document.getElementById('tank-btn');
 const rusherBtn = document.getElementById('rusher-btn');
+const scoutBtn = document.getElementById('scout-btn');
 const playerCounterEl = document.getElementById('player-counter');
 const gameOverOverlay = document.getElementById('game-over-overlay');
 const gameOverTitle = document.getElementById('game-over-title');
@@ -199,6 +200,7 @@ let gameStarted = false;
 let isSplitMove = false;
 let playerNickname = null;
 let playerNames = {};
+let playerClasses = {};
 
 // Mobile mode toggle state
 let mobileSplitMode = false; // When true, taps will do split moves instead of full moves
@@ -372,8 +374,10 @@ function connectToServer(selectedClass) {
             colorDot.className = 'player-color';
             colorDot.style.backgroundColor = COLORS[player.color] || '#888';
             
+            const classIcon = player.playerClass === 'tank' ? '🛡️' : (player.playerClass === 'scout' ? '🐴' : '⚡');
+            
             const nameSpan = document.createElement('span');
-            nameSpan.textContent = player.name;
+            nameSpan.textContent = classIcon + ' ' + player.name;
             nameSpan.style.color = COLORS[player.color] || '#fff';
             
             const leftDiv = document.createElement('div');
@@ -434,8 +438,8 @@ function connectToServer(selectedClass) {
     socket.on('playerAssigned', (data) => {
         playerColor = data.color;
         isHost = data.isHost;
-        const classLabel = playerClass === 'tank' ? 'Tank' : 'Rusher';
-        const classIcon = playerClass === 'tank' ? '🛡️' : '⚡';
+        const classLabel = playerClass === 'tank' ? 'Tank' : (playerClass === 'scout' ? 'Scout' : 'Rusher');
+        const classIcon = playerClass === 'tank' ? '🛡️' : (playerClass === 'scout' ? '🐴' : '⚡');
         playerInfoEl.textContent = 'You are: ' + playerColor.toUpperCase() + ' ' + classIcon + ' ' + classLabel;
         playerInfoEl.className = playerColor;
     });
@@ -565,7 +569,8 @@ function connectToServer(selectedClass) {
     });
 
     socket.on('playerNames', (data) => {
-        playerNames = data;
+        playerNames = data.names || data;
+        playerClasses = data.classes || {};
         updateMatchInfo();
     });
 
@@ -863,6 +868,12 @@ function isAdjacent(cell1, cell2) {
     return dx + dy === 1;
 }
 
+function getClassIcon(classType) {
+    if (classType === 'tank') return '🛡️';
+    if (classType === 'scout') return '🐴';
+    return '⚡';
+}
+
 function updateMatchInfo() {
     if (!playerColor || !playerNames) {
         matchInfoEl.innerHTML = '';
@@ -879,8 +890,9 @@ function updateMatchInfo() {
     
     const playerSpans = activePlayers.map(color => {
         const name = playerNames[color] || color.toUpperCase();
+        const classIcon = getClassIcon(playerClasses[color]);
         const isYou = color === playerColor;
-        return `<span class="player-name ${color}${isYou ? ' you' : ''}">${name}${isYou ? ' (Tu)' : ''}</span>`;
+        return `<span class="player-name ${color}${isYou ? ' you' : ''}">${name} ${classIcon}${isYou ? ' (Tu)' : ''}</span>`;
     });
     
     matchInfoEl.innerHTML = playerSpans.join('<span style="color: #888;"> vs </span>');
@@ -1063,6 +1075,12 @@ rusherBtn.addEventListener('click', () => {
     classModal.classList.add('hidden');
     statusEl.textContent = 'Connecting...';
     connectToServer('rusher');
+});
+
+scoutBtn.addEventListener('click', () => {
+    classModal.classList.add('hidden');
+    statusEl.textContent = 'Connecting...';
+    connectToServer('scout');
 });
 
 // Lobby event handlers

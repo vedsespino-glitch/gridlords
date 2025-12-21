@@ -3,14 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GridLords - Real-Time Strategy</title>
+    <title>PixelKing - Real-Time Strategy</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <!-- Login Overlay -->
     <div id="login-overlay" class="login-overlay">
         <div class="login-content">
-            <h1 class="login-title">GRIDLORDS</h1>
+            <h1 class="login-title pixel-font">PIXELKING</h1>
             <p class="login-subtitle">Conquista. Domina. Reina.</p>
             <div class="login-form">
                 <input type="text" id="nicknameInput" class="nickname-input" placeholder="Ingresa tu Nickname" maxlength="12" autocomplete="off">
@@ -49,18 +52,23 @@
     <!-- Class Selection Modal -->
     <div id="class-modal" class="modal hidden">
         <div class="modal-content">
-            <h2>Choose Your Class</h2>
-            <p class="modal-subtitle">Select your battle strategy</p>
-            <div class="class-options">
+            <h2 class="pixel-font">Elige tu Clase</h2>
+            <p class="modal-subtitle">Selecciona tu estrategia de batalla</p>
+            <div class="class-options three-classes">
                 <button id="tank-btn" class="class-btn tank-btn">
                     <span class="class-icon">🛡️</span>
-                    <span class="class-name">Tank</span>
-                    <span class="class-desc">General produces 2 troops/sec</span>
+                    <span class="class-name">TANK</span>
+                    <span class="class-desc">Torres + Rapidas</span>
                 </button>
                 <button id="rusher-btn" class="class-btn rusher-btn">
                     <span class="class-icon">⚡</span>
-                    <span class="class-name">Rusher</span>
-                    <span class="class-desc">Start with 30 troops</span>
+                    <span class="class-name">RUSHER</span>
+                    <span class="class-desc">+100 Tropas Inicio</span>
+                </button>
+                <button id="scout-btn" class="class-btn scout-btn">
+                    <span class="class-icon">🐴</span>
+                    <span class="class-name">SCOUT</span>
+                    <span class="class-desc">Vision Doble</span>
                 </button>
             </div>
         </div>
@@ -170,7 +178,7 @@
 
     <div id="game-container">
         <div id="header">
-            <h1>GridLords</h1>
+            <h1 class="pixel-font">PixelKing</h1>
             <div id="room-info" class="room-info hidden">Sala: <span id="currentRoomCode">----</span></div>
             <div id="player-counter">Jugadores: 0/4</div>
             <div id="match-info"></div>
