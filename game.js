@@ -211,46 +211,245 @@ let isHost = false;
 let pendingAction = null; // 'create' or 'join'
 
 // Audio Manager for game sound effects
+// Synthetic Audio Manager using Web Audio API
 const AudioManager = {
-    sounds: {},
+    audioContext: null,
     muted: false,
     volume: 0.5,
+    initialized: false,
     
-    // Sound URLs from free sources (Pixabay CDN)
-    soundUrls: {
-        move: 'https://cdn.pixabay.com/audio/2022/03/15/audio_115b9b87e4.mp3',      // Soft step/move sound
-        attack: 'https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a73467.mp3',    // Hit/sword sound
-        cannon: 'https://cdn.pixabay.com/audio/2022/03/15/audio_8cb749bf56.mp3',    // Explosion sound
-        split: 'https://cdn.pixabay.com/audio/2021/08/04/audio_0625c1539c.mp3',     // Whoosh/cut sound
-        win: 'https://cdn.pixabay.com/audio/2021/08/04/audio_12b0c7443c.mp3',       // Victory fanfare
-        lose: 'https://cdn.pixabay.com/audio/2022/03/15/audio_942694a069.mp3',      // Game over sound
-        alarm: 'https://cdn.pixabay.com/audio/2022/03/24/audio_8bfed9d0e5.mp3',     // Under attack alarm
-        radar: 'https://cdn.pixabay.com/audio/2022/03/15/audio_8cb749bf56.mp3'      // Enemy spotted radar ping
-    },
-    
+    // Initialize AudioContext on first user interaction
     init: function() {
-        // Preload all sounds
-        for (const [name, url] of Object.entries(this.soundUrls)) {
-            this.sounds[name] = new Audio(url);
-            this.sounds[name].volume = this.volume;
-            this.sounds[name].preload = 'auto';
+        if (this.initialized) return;
+        
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            this.initialized = true;
+            console.log('SynthAudioManager initialized with Web Audio API');
+        } catch (err) {
+            console.error('Web Audio API not supported:', err.message);
         }
-        console.log('AudioManager initialized with', Object.keys(this.sounds).length, 'sounds');
     },
     
-    play: function(soundName) {
-        if (this.muted) return;
-        
-        const sound = this.sounds[soundName];
-        if (sound) {
-            // Clone the audio to allow overlapping sounds
-            const clone = sound.cloneNode();
-            clone.volume = this.volume;
-            clone.play().catch(err => {
-                // Ignore autoplay errors (user hasn't interacted yet)
-                console.log('Audio play blocked:', err.message);
-            });
+    // Resume AudioContext if suspended (required after user interaction)
+    resume: function() {
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            this.audioContext.resume();
         }
+    },
+    
+    // Play synthesized sounds
+    play: function(soundName) {
+        if (this.muted || !this.audioContext) return;
+        
+        // Resume context if needed
+        this.resume();
+        
+        switch (soundName) {
+            case 'move':
+                this.playMove();
+                break;
+            case 'attack':
+                this.playAttack();
+                break;
+            case 'cannon':
+                this.playCannon();
+                break;
+            case 'split':
+                this.playSplit();
+                break;
+            case 'win':
+                this.playWin();
+                break;
+            case 'lose':
+                this.playLose();
+                break;
+            case 'alarm':
+                this.playAlarm();
+                break;
+            case 'radar':
+                this.playRadar();
+                break;
+            default:
+                console.log('Unknown sound:', soundName);
+        }
+    },
+    
+    // ALERT/RADAR: Sine wave ping from 800Hz to 0Hz (sonar effect)
+    playRadar: function() {
+        const ctx = this.audioContext;
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(800, ctx.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.3);
+        
+        gainNode.gain.setValueAtTime(this.volume * 0.4, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.3);
+    },
+    
+    // SHOOT/CANNON: Low frequency explosion with rapid decay
+    playCannon: function() {
+        const ctx = this.audioContext;
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        oscillator.type = 'sawtooth';
+        oscillator.frequency.setValueAtTime(100, ctx.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.2);
+        
+        gainNode.gain.setValueAtTime(this.volume * 0.5, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.2);
+    },
+    
+    // ALARM: Urgent alternating tones (under attack)
+    playAlarm: function() {
+        const ctx = this.audioContext;
+        
+        // First tone
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'square';
+        osc1.frequency.setValueAtTime(600, ctx.currentTime);
+        gain1.gain.setValueAtTime(this.volume * 0.3, ctx.currentTime);
+        gain1.gain.setValueAtTime(0, ctx.currentTime + 0.15);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(ctx.currentTime);
+        osc1.stop(ctx.currentTime + 0.15);
+        
+        // Second tone (higher pitch)
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'square';
+        osc2.frequency.setValueAtTime(800, ctx.currentTime + 0.15);
+        gain2.gain.setValueAtTime(0, ctx.currentTime);
+        gain2.gain.setValueAtTime(this.volume * 0.3, ctx.currentTime + 0.15);
+        gain2.gain.setValueAtTime(0, ctx.currentTime + 0.3);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(ctx.currentTime + 0.15);
+        osc2.stop(ctx.currentTime + 0.3);
+    },
+    
+    // MOVE: Soft click/step sound
+    playMove: function() {
+        const ctx = this.audioContext;
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(400, ctx.currentTime);
+        
+        gainNode.gain.setValueAtTime(this.volume * 0.2, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.05);
+    },
+    
+    // ATTACK: Hit/sword sound
+    playAttack: function() {
+        const ctx = this.audioContext;
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        oscillator.type = 'sawtooth';
+        oscillator.frequency.setValueAtTime(300, ctx.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.1);
+        
+        gainNode.gain.setValueAtTime(this.volume * 0.3, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.1);
+    },
+    
+    // SPLIT: Whoosh sound
+    playSplit: function() {
+        const ctx = this.audioContext;
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(600, ctx.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.15);
+        
+        gainNode.gain.setValueAtTime(this.volume * 0.25, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.15);
+    },
+    
+    // WIN: Victory fanfare (ascending tones)
+    playWin: function() {
+        const ctx = this.audioContext;
+        const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6
+        
+        notes.forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.15);
+            
+            gain.gain.setValueAtTime(0, ctx.currentTime);
+            gain.gain.setValueAtTime(this.volume * 0.3, ctx.currentTime + i * 0.15);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.15 + 0.2);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start(ctx.currentTime + i * 0.15);
+            osc.stop(ctx.currentTime + i * 0.15 + 0.2);
+        });
+    },
+    
+    // LOSE: Game over sound (descending tones)
+    playLose: function() {
+        const ctx = this.audioContext;
+        const notes = [392, 330, 262, 196]; // G4, E4, C4, G3
+        
+        notes.forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.2);
+            
+            gain.gain.setValueAtTime(0, ctx.currentTime);
+            gain.gain.setValueAtTime(this.volume * 0.3, ctx.currentTime + i * 0.2);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.2 + 0.25);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start(ctx.currentTime + i * 0.2);
+            osc.stop(ctx.currentTime + i * 0.2 + 0.25);
+        });
     },
     
     toggleMute: function() {
@@ -260,9 +459,6 @@ const AudioManager = {
     
     setVolume: function(vol) {
         this.volume = Math.max(0, Math.min(1, vol));
-        for (const sound of Object.values(this.sounds)) {
-            sound.volume = this.volume;
-        }
     }
 };
 
@@ -1166,18 +1362,21 @@ nicknameInput.addEventListener('keypress', (event) => {
 
 // Class selection event handlers
 tankBtn.addEventListener('click', () => {
+    AudioManager.init(); // Initialize AudioContext on user interaction
     classModal.classList.add('hidden');
     statusEl.textContent = 'Connecting...';
     connectToServer('tank');
 });
 
 rusherBtn.addEventListener('click', () => {
+    AudioManager.init(); // Initialize AudioContext on user interaction
     classModal.classList.add('hidden');
     statusEl.textContent = 'Connecting...';
     connectToServer('rusher');
 });
 
 scoutBtn.addEventListener('click', () => {
+    AudioManager.init(); // Initialize AudioContext on user interaction
     classModal.classList.add('hidden');
     statusEl.textContent = 'Connecting...';
     connectToServer('scout');
