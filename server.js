@@ -138,7 +138,8 @@ function createRoomState(hostSocketId) {
         spawnPositions: null,
         timers: {
             gameLoop: null,
-            artilleryLoop: null
+            artilleryLoop: null,
+            tankOutpostLoop: null
         }
     };
 }
@@ -320,21 +321,49 @@ function gameTick(roomId) {
             const cell = roomState.grid[y][x];
             
             if (cell.unit === UNIT.GENERAL && cell.owner) {
-                const playerId = Object.keys(roomState.players).find(
-                    id => roomState.players[id] === cell.owner
-                );
-                const playerClass = playerId ? roomState.playerClasses[playerId] : null;
-                const troopProduction = playerClass === 'tank' ? 2 : 1;
-                cell.troops += troopProduction;
+                cell.troops += 1;
             }
             
             if (cell.terrain === TERRAIN.OUTPOST && cell.owner) {
-                cell.troops += OUTPOST_CONFIG.TROOP_PRODUCTION;
+                const ownerId = Object.keys(roomState.players).find(
+                    id => roomState.players[id] === cell.owner
+                );
+                const ownerClass = ownerId ? roomState.playerClasses[ownerId] : null;
+                if (ownerClass !== 'tank') {
+                    cell.troops += OUTPOST_CONFIG.TROOP_PRODUCTION;
+                }
             }
         }
     }
 
     emitGameStateToRoom(roomId);
+}
+
+function tankOutpostTick(roomId) {
+    const roomState = rooms[roomId];
+    if (!roomState || !roomState.gameStarted || roomState.winner) return;
+
+    let stateChanged = false;
+    for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+            const cell = roomState.grid[y][x];
+            
+            if (cell.terrain === TERRAIN.OUTPOST && cell.owner) {
+                const ownerId = Object.keys(roomState.players).find(
+                    id => roomState.players[id] === cell.owner
+                );
+                const ownerClass = ownerId ? roomState.playerClasses[ownerId] : null;
+                if (ownerClass === 'tank') {
+                    cell.troops += OUTPOST_CONFIG.TROOP_PRODUCTION;
+                    stateChanged = true;
+                }
+            }
+        }
+    }
+
+    if (stateChanged) {
+        emitGameStateToRoom(roomId);
+    }
 }
 
 function artilleryTick(roomId) {
@@ -402,6 +431,8 @@ function artilleryTick(roomId) {
     }
 }
 
+const TANK_OUTPOST_INTERVAL = 800;
+
 function startGameLoop(roomId) {
     const roomState = rooms[roomId];
     if (!roomState) return;
@@ -413,6 +444,7 @@ function startGameLoop(roomId) {
     console.log('--- GAME LOOP STARTED for room ' + roomId + ' ---');
     roomState.timers.gameLoop = setInterval(() => gameTick(roomId), TICK_INTERVAL);
     roomState.timers.artilleryLoop = setInterval(() => artilleryTick(roomId), ARTILLERY_CONFIG.FIRE_INTERVAL);
+    roomState.timers.tankOutpostLoop = setInterval(() => tankOutpostTick(roomId), TANK_OUTPOST_INTERVAL);
 }
 
 function stopGameLoop(roomId) {
@@ -427,6 +459,10 @@ function stopGameLoop(roomId) {
     if (roomState.timers.artilleryLoop) {
         clearInterval(roomState.timers.artilleryLoop);
         roomState.timers.artilleryLoop = null;
+    }
+    if (roomState.timers.tankOutpostLoop) {
+        clearInterval(roomState.timers.tankOutpostLoop);
+        roomState.timers.tankOutpostLoop = null;
     }
 }
 
@@ -523,17 +559,26 @@ function cleanupRoom(roomId) {
 function getVisibleCells(roomState, playerColor) {
     const visible = new Set();
     
+    const playerId = Object.keys(roomState.players).find(
+        id => roomState.players[id] === playerColor
+    );
+    const playerClass = playerId ? roomState.playerClasses[playerId] : null;
+    const visionRange = playerClass === 'scout' ? 3 : 1;
+    
     for (let y = 0; y < GRID_SIZE; y++) {
         for (let x = 0; x < GRID_SIZE; x++) {
             const cell = roomState.grid[y][x];
             if (cell.owner === playerColor) {
                 visible.add(x + ',' + y);
-                const directions = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-                for (const [dx, dy] of directions) {
-                    const nx = x + dx;
-                    const ny = y + dy;
-                    if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
-                        visible.add(nx + ',' + ny);
+                for (let dy = -visionRange; dy <= visionRange; dy++) {
+                    for (let dx = -visionRange; dx <= visionRange; dx++) {
+                        if (Math.abs(dx) + Math.abs(dy) <= visionRange) {
+                            const nx = x + dx;
+                            const ny = y + dy;
+                            if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+                                visible.add(nx + ',' + ny);
+                            }
+                        }
                     }
                 }
             }
@@ -675,12 +720,21 @@ function getPlayerNamesForBroadcast(roomState) {
     return names;
 }
 
+function getPlayerClassesForBroadcast(roomState) {
+    const classes = {};
+    for (const [socketId, color] of Object.entries(roomState.players)) {
+        classes[color] = roomState.playerClasses[socketId] || 'rusher';
+    }
+    return classes;
+}
+
 function broadcastPlayerNames(roomId) {
     const roomState = rooms[roomId];
     if (!roomState) return;
     
     const names = getPlayerNamesForBroadcast(roomState);
-    io.to(roomId).emit('playerNames', names);
+    const classes = getPlayerClassesForBroadcast(roomState);
+    io.to(roomId).emit('playerNames', { names: names, classes: classes });
 }
 
 function eliminatePlayer(roomId, loserSocketId, attackerSocketId, reason) {
@@ -808,7 +862,7 @@ io.on('connection', (socket) => {
                 for (let x = 0; x < GRID_SIZE; x++) {
                     const cell = roomState.grid[y][x];
                     if (cell.unit === UNIT.GENERAL && cell.owner === playerColor) {
-                        cell.troops = 30;
+                        cell.troops = 150;
                     }
                 }
             }
@@ -870,7 +924,7 @@ io.on('connection', (socket) => {
                 for (let x = 0; x < GRID_SIZE; x++) {
                     const cell = roomState.grid[y][x];
                     if (cell.unit === UNIT.GENERAL && cell.owner === playerColor) {
-                        cell.troops = 30;
+                        cell.troops = 150;
                     }
                 }
             }

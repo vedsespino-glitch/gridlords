@@ -4,6 +4,10 @@
     box-sizing: border-box;
 }
 
+.pixel-font {
+    font-family: 'Press Start 2P', cursive !important;
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #0f0f1a 100%);
@@ -230,6 +234,22 @@ body {
 .rusher-btn:hover {
     border-color: #ff7675;
     box-shadow: 0 10px 30px rgba(231, 76, 60, 0.4);
+}
+
+.scout-btn {
+    background: linear-gradient(135deg, #27ae60 0%, #1e8449 100%);
+    border-color: #27ae60;
+}
+
+.scout-btn:hover {
+    border-color: #58d68d;
+    box-shadow: 0 10px 30px rgba(39, 174, 96, 0.4);
+}
+
+.class-options.three-classes {
+    flex-wrap: wrap;
+    gap: 20px;
+    max-width: 550px;
 }
 
 .class-icon {
