@@ -960,6 +960,7 @@ function tryReconnectPlayer(socket, sessionToken) {
     }
     
     roomState.playerSessionTokens[newSocketId] = sessionToken;
+    delete roomState.playerSessionTokens[oldSocketId];
     
     if (roomState.deadPlayers[oldSocketId] !== undefined) {
         roomState.deadPlayers[newSocketId] = roomState.deadPlayers[oldSocketId];
@@ -971,7 +972,13 @@ function tryReconnectPlayer(socket, sessionToken) {
     }
     
     socketToRoom[newSocketId] = roomId;
+    delete socketToRoom[oldSocketId];
     socket.join(roomId);
+    
+    console.log('Socket ID transfer complete. New mappings:');
+    console.log('  socketToRoom[' + newSocketId + '] =', socketToRoom[newSocketId]);
+    console.log('  roomState.players[' + newSocketId + '] =', roomState.players[newSocketId]);
+    console.log('  All players in room:', Object.keys(roomState.players));
     
     socket.emit('reconnected', {
         roomId: roomId,
@@ -1133,6 +1140,12 @@ io.on('connection', (socket) => {
                     delete socketToRoom[existingSocketId];
                     socket.join(upperRoomId);
                     
+                    console.log('joinRoom reconnection - Socket ID transfer complete:');
+                    console.log('  Old socket:', existingSocketId, '-> New socket:', socket.id);
+                    console.log('  socketToRoom[' + socket.id + '] =', socketToRoom[socket.id]);
+                    console.log('  roomState.players[' + socket.id + '] =', roomState.players[socket.id]);
+                    console.log('  All players in room:', Object.keys(roomState.players));
+                    
                     socket.emit('reconnected', {
                         roomId: upperRoomId,
                         color: playerColor,
@@ -1233,17 +1246,31 @@ io.on('connection', (socket) => {
 
     socket.on('move', (data) => {
         const roomId = getRoomIdBySocketId(socket.id);
-        if (!roomId) return;
+        if (!roomId) {
+            console.log('Move rejected: socket.id', socket.id, 'not found in socketToRoom');
+            return;
+        }
         
         const roomState = rooms[roomId];
-        if (!roomState || !roomState.gameStarted || roomState.winner) return;
-        if (roomState.deadPlayers[socket.id]) return;
+        if (!roomState || !roomState.gameStarted || roomState.winner) {
+            console.log('Move rejected: roomState invalid, gameStarted:', roomState?.gameStarted, 'winner:', roomState?.winner);
+            return;
+        }
+        if (roomState.deadPlayers[socket.id]) {
+            console.log('Move rejected: player is dead');
+            return;
+        }
 
         const from = data.from;
         const to = data.to;
         const splitMove = data.splitMove;
+        const playerColor = roomState.players[socket.id];
+        console.log('Move attempt by socket.id:', socket.id, 'playerColor:', playerColor, 'from:', from, 'to:', to);
+        
         if (isValidMove(roomState, socket.id, from, to)) {
             executeMove(roomId, socket.id, from, to, splitMove || false);
+        } else {
+            console.log('Move rejected: isValidMove returned false. Players map:', Object.keys(roomState.players));
         }
     });
 

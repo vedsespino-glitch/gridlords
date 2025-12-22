@@ -209,6 +209,7 @@ let mobileSplitMode = false; // When true, taps will do split moves instead of f
 let currentRoomId = null;
 let isHost = false;
 let pendingAction = null; // 'create' or 'join'
+let alreadyReconnected = false; // Flag to prevent duplicate joinRoom after handshake reconnection
 
 // Session token for reconnection support
 function generateSessionToken() {
@@ -403,14 +404,23 @@ function connectToServer(selectedClass) {
     socket.on('connect', () => {
         console.log('Socket connected:', socket.id, 'with sessionToken:', sessionToken);
         
-        // Execute pending action after connection
-        if (pendingAction === 'create') {
-            socket.emit('createRoom', { nickname: playerNickname, playerClass: playerClass, sessionToken: sessionToken });
-        } else if (pendingAction === 'join') {
-            const roomCode = roomCodeInput.value.trim().toUpperCase();
-            socket.emit('joinRoom', { roomId: roomCode, nickname: playerNickname, playerClass: playerClass, sessionToken: sessionToken });
-        }
-        pendingAction = null;
+        // Small delay to allow reconnected event to arrive first (if handshake reconnection succeeded)
+        setTimeout(() => {
+            if (alreadyReconnected) {
+                console.log('Already reconnected via handshake, skipping pendingAction');
+                pendingAction = null;
+                return;
+            }
+            
+            // Execute pending action after connection
+            if (pendingAction === 'create') {
+                socket.emit('createRoom', { nickname: playerNickname, playerClass: playerClass, sessionToken: sessionToken });
+            } else if (pendingAction === 'join') {
+                const roomCode = roomCodeInput.value.trim().toUpperCase();
+                socket.emit('joinRoom', { roomId: roomCode, nickname: playerNickname, playerClass: playerClass, sessionToken: sessionToken });
+            }
+            pendingAction = null;
+        }, 100);
     });
 
     socket.on('connect_error', (err) => {
@@ -544,6 +554,7 @@ function connectToServer(selectedClass) {
         playerColor = null;
         gameStarted = false;
         hasCenteredOnPlayer = false;
+        alreadyReconnected = false;
         clearSavedRoomId();
         
         // Hide mobile mode toggle button when leaving room
@@ -573,6 +584,8 @@ function connectToServer(selectedClass) {
 
     socket.on('reconnected', (data) => {
         console.log('Successfully reconnected to game!', data);
+        alreadyReconnected = true;
+        pendingAction = null;
         playerColor = data.color;
         playerClass = data.playerClass;
         currentRoomId = data.roomId;
