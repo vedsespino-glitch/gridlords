@@ -210,6 +210,26 @@ let currentRoomId = null;
 let isHost = false;
 let pendingAction = null; // 'create' or 'join'
 
+// Session token for reconnection support
+function generateSessionToken() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+function getOrCreateSessionToken() {
+    let token = localStorage.getItem('pixelking_session_token');
+    if (!token) {
+        token = generateSessionToken();
+        localStorage.setItem('pixelking_session_token', token);
+    }
+    return token;
+}
+
+const sessionToken = getOrCreateSessionToken();
+
 // Audio Manager for game sound effects
 // MP3-based Audio Manager
 const AudioManager = {
@@ -360,18 +380,21 @@ function connectToServer(selectedClass) {
     socket = io(window.location.origin, {
         transports: ['websocket'], 
         upgrade: false,
-        timeout: 5000
+        timeout: 5000,
+        auth: {
+            sessionToken: sessionToken
+        }
     });
 
     socket.on('connect', () => {
-        console.log('Socket connected:', socket.id);
+        console.log('Socket connected:', socket.id, 'with sessionToken:', sessionToken);
         
         // Execute pending action after connection
         if (pendingAction === 'create') {
-            socket.emit('createRoom', { nickname: playerNickname, playerClass: playerClass });
+            socket.emit('createRoom', { nickname: playerNickname, playerClass: playerClass, sessionToken: sessionToken });
         } else if (pendingAction === 'join') {
             const roomCode = roomCodeInput.value.trim().toUpperCase();
-            socket.emit('joinRoom', { roomId: roomCode, nickname: playerNickname, playerClass: playerClass });
+            socket.emit('joinRoom', { roomId: roomCode, nickname: playerNickname, playerClass: playerClass, sessionToken: sessionToken });
         }
         pendingAction = null;
     });
@@ -529,6 +552,50 @@ function connectToServer(selectedClass) {
         const classIcon = playerClass === 'tank' ? '🛡️' : (playerClass === 'scout' ? '🐴' : '⚡');
         playerInfoEl.textContent = 'You are: ' + playerColor.toUpperCase() + ' ' + classIcon + ' ' + classLabel;
         playerInfoEl.className = playerColor;
+    });
+
+    socket.on('reconnected', (data) => {
+        console.log('Successfully reconnected to game!', data);
+        playerColor = data.color;
+        playerClass = data.playerClass;
+        currentRoomId = data.roomId;
+        gameStarted = data.gameStarted;
+        isHost = data.isHost;
+        
+        const classLabel = playerClass === 'tank' ? 'Tank' : (playerClass === 'scout' ? 'Scout' : 'Rusher');
+        const classIcon = playerClass === 'tank' ? '🛡️' : (playerClass === 'scout' ? '🐴' : '⚡');
+        playerInfoEl.textContent = 'You are: ' + playerColor.toUpperCase() + ' ' + classIcon + ' ' + classLabel;
+        playerInfoEl.className = playerColor;
+        
+        statusEl.textContent = 'Reconnected! Welcome back!';
+        statusEl.style.background = '#27ae60';
+        
+        loginOverlay.classList.add('hidden');
+        lobbyOverlay.classList.add('hidden');
+        classModal.classList.add('hidden');
+        gameOverOverlay.classList.add('hidden');
+        
+        if (gameStarted) {
+            roomInfoEl.classList.remove('hidden');
+            const modeToggleBtn = document.getElementById('modeToggleBtn');
+            if (modeToggleBtn) {
+                modeToggleBtn.classList.add('game-active');
+            }
+        }
+        
+        if (chatContainer) {
+            chatContainer.classList.remove('hidden');
+        }
+    });
+
+    socket.on('playerReconnected', (data) => {
+        console.log('Player reconnected:', data.nickname);
+        addSystemMessage(data.nickname + ' ha vuelto!');
+    });
+
+    socket.on('playerDisconnecting', (data) => {
+        console.log('Player disconnecting:', data.nickname, '- timeout in', data.timeout, 'seconds');
+        addSystemMessage(data.nickname + ' se desconecto. Tiene ' + data.timeout + 's para volver.');
     });
 
     socket.on('gameStart', (data) => {
