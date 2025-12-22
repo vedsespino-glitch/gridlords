@@ -104,9 +104,9 @@ body {
     box-shadow: 
         0 0 20px rgba(139, 69, 19, 0.5),
         0 0 40px rgba(139, 69, 19, 0.3),
-        inset 0 0 10px rgba(0, 0, 0, 0.5);
+        inset 0 0 10px rgba(0, 0, 0, 0.2);
     cursor: pointer;
-    background: #0d0d0d;
+    background: #e0e0e0;
     transition: box-shadow 0.3s ease;
 }
 
@@ -898,9 +898,9 @@ body {
     letter-spacing: 1px;
 }
 
-/* Mobile Responsive Styles */
-@media screen and (max-width: 768px) {
-    /* Show mode toggle button on mobile ONLY when game is active (via .game-active class) */
+/* Mobile and Tablet Responsive Styles (up to 1024px for iPad/tablet support) */
+@media screen and (max-width: 1024px) {
+    /* Show mode toggle button on mobile/tablet ONLY when game is active (via .game-active class) */
     .mode-toggle-btn.game-active {
         display: flex;
         align-items: center;

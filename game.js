@@ -57,8 +57,8 @@ const DEFAULT_CELL_SIZE_PC = 25;
 const DEFAULT_CELL_SIZE_MOBILE = 35;
 const ZOOM_STEP = 5;
 
-// Detect if mobile device
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+// Detect if mobile or tablet device (includes tablets up to 1024px for touch support)
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 1024 || ('ontouchstart' in window);
 
 // Set initial cell size based on device (35px minimum for mobile for touch-friendly cells)
 let cellSize = isMobile ? DEFAULT_CELL_SIZE_MOBILE : DEFAULT_CELL_SIZE_PC;
@@ -125,8 +125,8 @@ function centerCameraOnPlayer() {
 updateCanvasSize();
 
 const COLORS = {
-    empty: '#1a1a1a',
-    mountain: '#4a4a4a',
+    empty: '#f0f0f0',
+    mountain: '#6a6a6a',
     red: '#c0392b',
     blue: '#2980b9',
     green: '#1e8449',
@@ -137,8 +137,9 @@ const COLORS = {
     greenLight: 'rgba(30, 132, 73, 0.7)',
     yellowLight: 'rgba(212, 172, 13, 0.7)',
     purpleLight: 'rgba(125, 60, 152, 0.7)',
-    grid: '#0d0d0d',
-    text: '#ffffff',
+    grid: '#e0e0e0',
+    text: '#1a1a1a',
+    textLight: '#ffffff',
     selected: '#f1c40f',
     selectedSplit: '#e67e22',
     general: '#ffd700',
@@ -877,6 +878,8 @@ function render() {
             // Draw troops with army icons for large armies
             if (cell.troops > 0 && cell.terrain !== TERRAIN.MOUNTAIN) {
                 const hasTopIcon = cell.unit === 'general' || cell.terrain === TERRAIN.OUTPOST || cell.terrain === TERRAIN.ARTILLERY;
+                // Use light text on colored backgrounds (owned cells), dark text on light backgrounds (empty cells)
+                const textColor = cell.owner ? COLORS.textLight : COLORS.text;
                 
                 if (cell.troops > 10 && !hasTopIcon) {
                     // Large army: show swords emoji + number
@@ -885,7 +888,7 @@ function render() {
                     ctx.textBaseline = 'top';
                     ctx.fillText('⚔️', px + cellSize / 2, py + 1);
                     
-                    ctx.fillStyle = COLORS.text;
+                    ctx.fillStyle = textColor;
                     ctx.font = 'bold ' + getScaledFontSize(7) + ' Arial';
                     ctx.textBaseline = 'bottom';
                     ctx.fillText(cell.troops.toString(), px + cellSize / 2, py + cellSize - 1);
@@ -896,13 +899,13 @@ function render() {
                     ctx.textBaseline = 'top';
                     ctx.fillText('🛡️', px + cellSize / 2, py + 1);
                     
-                    ctx.fillStyle = COLORS.text;
+                    ctx.fillStyle = textColor;
                     ctx.font = 'bold ' + getScaledFontSize(7) + ' Arial';
                     ctx.textBaseline = 'bottom';
                     ctx.fillText(cell.troops.toString(), px + cellSize / 2, py + cellSize - 1);
                 } else {
                     // Small army or special building: just show number
-                    ctx.fillStyle = COLORS.text;
+                    ctx.fillStyle = textColor;
                     ctx.font = 'bold ' + getScaledFontSize(8) + ' Arial';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = hasTopIcon ? 'bottom' : 'middle';
@@ -921,8 +924,8 @@ function render() {
         }
     }
 
-    // Draw grid lines with darker color
-    ctx.strokeStyle = '#1a1a2e';
+    // Draw grid lines with subtle gray color for light map theme
+    ctx.strokeStyle = '#d0d0d0';
     ctx.lineWidth = 1;
     for (let i = 0; i <= GRID_SIZE; i++) {
         ctx.beginPath();
