@@ -1000,14 +1000,18 @@ io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
     
     const sessionToken = socket.handshake.auth.sessionToken;
+    let alreadyReconnected = false;
+    
     if (sessionToken && disconnectedPlayers[sessionToken]) {
         console.log('Attempting reconnection with token:', sessionToken);
-        if (tryReconnectPlayer(socket, sessionToken)) {
-            return;
-        }
+        alreadyReconnected = tryReconnectPlayer(socket, sessionToken);
     }
 
     socket.on('createRoom', (data) => {
+        if (alreadyReconnected) {
+            socket.emit('error', { message: 'Already reconnected to a game' });
+            return;
+        }
         const nickname = data.nickname;
         const playerClass = data.playerClass;
         const playerSessionToken = data.sessionToken;
@@ -1057,6 +1061,11 @@ io.on('connection', (socket) => {
     });
 
     socket.on('joinRoom', (data) => {
+        if (alreadyReconnected) {
+            socket.emit('error', { message: 'Already reconnected to a game' });
+            return;
+        }
+        
         const roomId = data.roomId;
         const nickname = data.nickname;
         const playerClass = data.playerClass;
@@ -1076,6 +1085,77 @@ io.on('connection', (socket) => {
         const roomState = rooms[upperRoomId];
         
         if (roomState.gameStarted) {
+            if (playerSessionToken) {
+                if (disconnectedPlayers[playerSessionToken] && disconnectedPlayers[playerSessionToken].roomId === upperRoomId) {
+                    console.log('Reconnecting via joinRoom with token:', playerSessionToken);
+                    if (tryReconnectPlayer(socket, playerSessionToken)) {
+                        alreadyReconnected = true;
+                        return;
+                    }
+                }
+                
+                const existingSocketId = Object.keys(roomState.playerSessionTokens).find(
+                    sid => roomState.playerSessionTokens[sid] === playerSessionToken
+                );
+                if (existingSocketId) {
+                    console.log('Reconnecting existing player via joinRoom, old socket:', existingSocketId);
+                    
+                    const playerColor = roomState.players[existingSocketId];
+                    const existingPlayerClass = roomState.playerClasses[existingSocketId];
+                    const existingNickname = roomState.playerNames[existingSocketId];
+                    const isHost = roomState.hostSocketId === existingSocketId;
+                    
+                    roomState.players[socket.id] = playerColor;
+                    delete roomState.players[existingSocketId];
+                    
+                    roomState.playerClasses[socket.id] = existingPlayerClass;
+                    delete roomState.playerClasses[existingSocketId];
+                    
+                    roomState.playerNames[socket.id] = existingNickname;
+                    delete roomState.playerNames[existingSocketId];
+                    
+                    roomState.playerColors[socket.id] = playerColor;
+                    delete roomState.playerColors[existingSocketId];
+                    
+                    roomState.playerSessionTokens[socket.id] = playerSessionToken;
+                    delete roomState.playerSessionTokens[existingSocketId];
+                    
+                    if (roomState.deadPlayers[existingSocketId] !== undefined) {
+                        roomState.deadPlayers[socket.id] = roomState.deadPlayers[existingSocketId];
+                        delete roomState.deadPlayers[existingSocketId];
+                    }
+                    
+                    if (isHost) {
+                        roomState.hostSocketId = socket.id;
+                    }
+                    
+                    socketToRoom[socket.id] = upperRoomId;
+                    delete socketToRoom[existingSocketId];
+                    socket.join(upperRoomId);
+                    
+                    socket.emit('reconnected', {
+                        roomId: upperRoomId,
+                        color: playerColor,
+                        playerClass: existingPlayerClass,
+                        gameStarted: roomState.gameStarted,
+                        isHost: roomState.hostSocketId === socket.id
+                    });
+                    
+                    socket.emit('gameState', getFilteredGameState(roomState, playerColor));
+                    
+                    io.to(upperRoomId).emit('playerReconnected', {
+                        color: playerColor,
+                        nickname: existingNickname
+                    });
+                    
+                    broadcastPlayerNames(upperRoomId);
+                    alreadyReconnected = true;
+                    
+                    console.log('Player ' + existingNickname + ' reconnected via joinRoom!');
+                    return;
+                }
+            }
+            
             socket.emit('error', { message: 'Game already in progress' });
             return;
         }

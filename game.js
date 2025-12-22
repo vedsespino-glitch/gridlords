@@ -230,6 +230,20 @@ function getOrCreateSessionToken() {
 
 const sessionToken = getOrCreateSessionToken();
 
+function saveRoomId(roomId) {
+    if (roomId) {
+        localStorage.setItem('pixelking_room_id', roomId);
+    }
+}
+
+function getSavedRoomId() {
+    return localStorage.getItem('pixelking_room_id');
+}
+
+function clearSavedRoomId() {
+    localStorage.removeItem('pixelking_room_id');
+}
+
 // Audio Manager for game sound effects
 // MP3-based Audio Manager
 const AudioManager = {
@@ -432,6 +446,7 @@ function connectToServer(selectedClass) {
         isHost = true;
         roomCodeDisplay.textContent = data.roomId;
         currentRoomCodeEl.textContent = data.roomId;
+        saveRoomId(data.roomId);
         
         classModal.classList.add('hidden');
         lobbyOverlay.classList.remove('hidden');
@@ -454,6 +469,7 @@ function connectToServer(selectedClass) {
         currentRoomId = data.roomId;
         roomCodeDisplay.textContent = data.roomId;
         currentRoomCodeEl.textContent = data.roomId;
+        saveRoomId(data.roomId);
         
         classModal.classList.add('hidden');
         lobbyOverlay.classList.remove('hidden');
@@ -528,6 +544,7 @@ function connectToServer(selectedClass) {
         playerColor = null;
         gameStarted = false;
         hasCenteredOnPlayer = false;
+        clearSavedRoomId();
         
         // Hide mobile mode toggle button when leaving room
         const modeToggleBtn = document.getElementById('modeToggleBtn');
@@ -561,6 +578,7 @@ function connectToServer(selectedClass) {
         currentRoomId = data.roomId;
         gameStarted = data.gameStarted;
         isHost = data.isHost;
+        saveRoomId(data.roomId);
         
         const classLabel = playerClass === 'tank' ? 'Tank' : (playerClass === 'scout' ? 'Scout' : 'Rusher');
         const classIcon = playerClass === 'tank' ? '🛡️' : (playerClass === 'scout' ? '🐴' : '⚡');
@@ -1539,3 +1557,15 @@ if (zoomInBtn) {
 if (zoomOutBtn) {
     zoomOutBtn.addEventListener('click', zoomOut);
 }
+
+// Auto-reconnect on page load if sessionToken and roomId exist
+(function checkAutoReconnect() {
+    const savedRoomId = getSavedRoomId();
+    if (savedRoomId && sessionToken) {
+        console.log('Found saved room:', savedRoomId, 'with sessionToken:', sessionToken);
+        roomCodeInput.value = savedRoomId;
+        
+        statusEl.textContent = 'Reconectando a sala ' + savedRoomId + '...';
+        statusEl.style.background = '#f39c12';
+    }
+})();
