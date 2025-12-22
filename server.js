@@ -1244,7 +1244,9 @@ io.on('connection', (socket) => {
         console.log('Host ' + socket.id + ' started game in room ' + roomId);
     });
 
+    console.log('Registering move handler for socket:', socket.id, 'alreadyReconnected:', alreadyReconnected);
     socket.on('move', (data) => {
+        console.log('Move event received from socket:', socket.id);
         const roomId = getRoomIdBySocketId(socket.id);
         if (!roomId) {
             console.log('Move rejected: socket.id', socket.id, 'not found in socketToRoom');

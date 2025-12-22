@@ -1125,6 +1125,7 @@ function handleCanvasInput(event) {
                 AudioManager.play('move');
             }
             
+            console.log('Emitting move event, socket connected:', socket.connected, 'socket.id:', socket.id);
             socket.emit('move', {
                 from: selectedCell,
                 to: clickedCell,
