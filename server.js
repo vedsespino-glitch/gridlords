@@ -107,8 +107,11 @@ const PLAYER_COLORS = ['red', 'blue', 'green', 'yellow', 'purple'];
 const MAX_PLAYERS = 4;
 const MIN_PLAYERS_TO_START = 2;
 
+const RECONNECT_TIMEOUT = 60000; // 60 seconds to reconnect
+
 const rooms = {};
 const socketToRoom = {};
+const disconnectedPlayers = {}; // sessionToken -> { roomId, socketId, color, nickname, playerClass, disconnectTime, timeoutId }
 
 function generateRoomId() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -129,6 +132,7 @@ function createRoomState(hostSocketId) {
         playerClasses: {},
         playerNames: {},
         playerColors: {},
+        playerSessionTokens: {},
         deadPlayers: {},
         playerCount: 0,
         gameStarted: false,
@@ -827,12 +831,186 @@ function promoteNewHost(roomId) {
     }
 }
 
+function markPlayerDisconnected(roomId, socketId, sessionToken) {
+    const roomState = rooms[roomId];
+    if (!roomState) return;
+    
+    const playerColor = roomState.players[socketId];
+    const playerNickname = roomState.playerNames[socketId];
+    const playerClass = roomState.playerClasses[socketId];
+    
+    if (!sessionToken || !playerColor) return;
+    
+    console.log('Marking player ' + playerNickname + ' (' + playerColor + ') as disconnected with token ' + sessionToken);
+    
+    const timeoutId = setTimeout(() => {
+        console.log('Reconnection timeout expired for ' + playerNickname + ' (' + sessionToken + ')');
+        finalizePlayerDisconnect(roomId, sessionToken);
+    }, RECONNECT_TIMEOUT);
+    
+    disconnectedPlayers[sessionToken] = {
+        roomId: roomId,
+        oldSocketId: socketId,
+        color: playerColor,
+        nickname: playerNickname,
+        playerClass: playerClass,
+        disconnectTime: Date.now(),
+        timeoutId: timeoutId
+    };
+    
+    io.to(roomId).emit('playerDisconnecting', {
+        color: playerColor,
+        nickname: playerNickname,
+        timeout: RECONNECT_TIMEOUT / 1000
+    });
+}
+
+function finalizePlayerDisconnect(roomId, sessionToken) {
+    const disconnectedPlayer = disconnectedPlayers[sessionToken];
+    if (!disconnectedPlayer) return;
+    
+    const roomState = rooms[roomId];
+    if (!roomState) {
+        delete disconnectedPlayers[sessionToken];
+        return;
+    }
+    
+    console.log('Finalizing disconnect for ' + disconnectedPlayer.nickname + ' - timeout expired');
+    
+    const oldSocketId = disconnectedPlayer.oldSocketId;
+    
+    if (roomState.gameStarted && !roomState.deadPlayers[oldSocketId]) {
+        eliminatePlayer(roomId, oldSocketId, null, 'disconnect');
+    }
+    
+    delete roomState.players[oldSocketId];
+    delete roomState.playerClasses[oldSocketId];
+    delete roomState.playerNames[oldSocketId];
+    delete roomState.playerColors[oldSocketId];
+    delete roomState.playerSessionTokens[oldSocketId];
+    delete roomState.deadPlayers[oldSocketId];
+    roomState.playerCount = Object.keys(roomState.players).length;
+    
+    if (Object.keys(roomState.players).length === 0) {
+        cleanupRoom(roomId);
+    } else {
+        if (oldSocketId === roomState.hostSocketId) {
+            promoteNewHost(roomId);
+        }
+        
+        if (!roomState.gameStarted) {
+            broadcastRoomInfo(roomId);
+            broadcastPlayerNames(roomId);
+        }
+    }
+    
+    delete disconnectedPlayers[sessionToken];
+}
+
+function tryReconnectPlayer(socket, sessionToken) {
+    const disconnectedPlayer = disconnectedPlayers[sessionToken];
+    if (!disconnectedPlayer) return false;
+    
+    const roomId = disconnectedPlayer.roomId;
+    const roomState = rooms[roomId];
+    
+    if (!roomState) {
+        clearTimeout(disconnectedPlayer.timeoutId);
+        delete disconnectedPlayers[sessionToken];
+        return false;
+    }
+    
+    if (roomState.winner) {
+        clearTimeout(disconnectedPlayer.timeoutId);
+        delete disconnectedPlayers[sessionToken];
+        return false;
+    }
+    
+    console.log('Reconnecting player ' + disconnectedPlayer.nickname + ' (' + disconnectedPlayer.color + ') to room ' + roomId);
+    
+    clearTimeout(disconnectedPlayer.timeoutId);
+    
+    const oldSocketId = disconnectedPlayer.oldSocketId;
+    const newSocketId = socket.id;
+    
+    if (roomState.players[oldSocketId]) {
+        roomState.players[newSocketId] = roomState.players[oldSocketId];
+        delete roomState.players[oldSocketId];
+    } else {
+        roomState.players[newSocketId] = disconnectedPlayer.color;
+    }
+    
+    if (roomState.playerClasses[oldSocketId]) {
+        roomState.playerClasses[newSocketId] = roomState.playerClasses[oldSocketId];
+        delete roomState.playerClasses[oldSocketId];
+    } else {
+        roomState.playerClasses[newSocketId] = disconnectedPlayer.playerClass;
+    }
+    
+    if (roomState.playerNames[oldSocketId]) {
+        roomState.playerNames[newSocketId] = roomState.playerNames[oldSocketId];
+        delete roomState.playerNames[oldSocketId];
+    } else {
+        roomState.playerNames[newSocketId] = disconnectedPlayer.nickname;
+    }
+    
+    if (roomState.playerColors[oldSocketId]) {
+        roomState.playerColors[newSocketId] = roomState.playerColors[oldSocketId];
+        delete roomState.playerColors[oldSocketId];
+    }
+    
+    roomState.playerSessionTokens[newSocketId] = sessionToken;
+    
+    if (roomState.deadPlayers[oldSocketId] !== undefined) {
+        roomState.deadPlayers[newSocketId] = roomState.deadPlayers[oldSocketId];
+        delete roomState.deadPlayers[oldSocketId];
+    }
+    
+    if (roomState.hostSocketId === oldSocketId) {
+        roomState.hostSocketId = newSocketId;
+    }
+    
+    socketToRoom[newSocketId] = roomId;
+    socket.join(roomId);
+    
+    socket.emit('reconnected', {
+        roomId: roomId,
+        color: disconnectedPlayer.color,
+        playerClass: disconnectedPlayer.playerClass,
+        gameStarted: roomState.gameStarted,
+        isHost: roomState.hostSocketId === newSocketId
+    });
+    
+    socket.emit('gameState', getFilteredGameState(roomState, disconnectedPlayer.color));
+    
+    io.to(roomId).emit('playerReconnected', {
+        color: disconnectedPlayer.color,
+        nickname: disconnectedPlayer.nickname
+    });
+    
+    broadcastPlayerNames(roomId);
+    
+    delete disconnectedPlayers[sessionToken];
+    
+    console.log('Player ' + disconnectedPlayer.nickname + ' successfully reconnected!');
+    return true;
+}
+
 io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
+    
+    const sessionToken = socket.handshake.auth.sessionToken;
+    if (sessionToken && disconnectedPlayers[sessionToken]) {
+        console.log('Attempting reconnection with token:', sessionToken);
+        if (tryReconnectPlayer(socket, sessionToken)) {
+            return;
+        }
+    }
 
     socket.on('createRoom', (data) => {
         const nickname = data.nickname;
         const playerClass = data.playerClass;
+        const playerSessionToken = data.sessionToken;
         
         if (socketToRoom[socket.id]) {
             socket.emit('error', { message: 'Already in a room' });
@@ -855,6 +1033,7 @@ io.on('connection', (socket) => {
         roomState.playerClasses[socket.id] = playerClass || 'rusher';
         roomState.playerNames[socket.id] = nickname || 'General 1';
         roomState.playerColors[socket.id] = playerColor;
+        roomState.playerSessionTokens[socket.id] = playerSessionToken;
         roomState.playerCount = 1;
         
         if (roomState.playerClasses[socket.id] === 'rusher') {
@@ -881,6 +1060,7 @@ io.on('connection', (socket) => {
         const roomId = data.roomId;
         const nickname = data.nickname;
         const playerClass = data.playerClass;
+        const playerSessionToken = data.sessionToken;
         const upperRoomId = roomId.toUpperCase();
         
         if (socketToRoom[socket.id]) {
@@ -917,6 +1097,7 @@ io.on('connection', (socket) => {
         roomState.playerClasses[socket.id] = playerClass || 'rusher';
         roomState.playerNames[socket.id] = nickname || ('General ' + playerNumber);
         roomState.playerColors[socket.id] = playerColor;
+        roomState.playerSessionTokens[socket.id] = playerSessionToken;
         roomState.playerCount = Object.keys(roomState.players).length;
         
         if (roomState.playerClasses[socket.id] === 'rusher') {
@@ -994,6 +1175,14 @@ io.on('connection', (socket) => {
             const roomState = rooms[roomId];
             
             if (roomState) {
+                const playerSessionToken = roomState.playerSessionTokens[socket.id];
+                
+                if (roomState.gameStarted && !roomState.deadPlayers[socket.id] && playerSessionToken) {
+                    markPlayerDisconnected(roomId, socket.id, playerSessionToken);
+                    delete socketToRoom[socket.id];
+                    return;
+                }
+                
                 if (roomState.gameStarted && !roomState.deadPlayers[socket.id]) {
                     eliminatePlayer(roomId, socket.id, null, 'disconnect');
                 }
@@ -1002,6 +1191,7 @@ io.on('connection', (socket) => {
                 delete roomState.playerClasses[socket.id];
                 delete roomState.playerNames[socket.id];
                 delete roomState.playerColors[socket.id];
+                delete roomState.playerSessionTokens[socket.id];
                 delete roomState.deadPlayers[socket.id];
                 roomState.playerCount = Object.keys(roomState.players).length;
                 
@@ -1045,6 +1235,7 @@ io.on('connection', (socket) => {
             delete roomState.playerClasses[socket.id];
             delete roomState.playerNames[socket.id];
             delete roomState.playerColors[socket.id];
+            delete roomState.playerSessionTokens[socket.id];
             roomState.playerCount = Object.keys(roomState.players).length;
             
             socket.leave(roomId);
