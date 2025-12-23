@@ -907,6 +907,169 @@ function finalizePlayerDisconnect(roomId, sessionToken) {
     delete disconnectedPlayers[sessionToken];
 }
 
+function setupGameListeners(socket) {
+    if (socket.data && socket.data.gameListenersAttached) {
+        console.log('Game listeners already attached for socket:', socket.id);
+        return;
+    }
+    socket.data = socket.data || {};
+    socket.data.gameListenersAttached = true;
+    
+    console.log('Attaching game listeners for socket:', socket.id);
+    
+    socket.on('ping_reconnect', (data) => {
+        console.log('ping_reconnect received from socket:', socket.id, 'data:', data);
+        socket.emit('pong_reconnect', { success: true, socketId: socket.id });
+    });
+    
+    socket.on('move', (data) => {
+        console.log('Move event received from socket:', socket.id);
+        const roomId = getRoomIdBySocketId(socket.id);
+        if (!roomId) {
+            console.log('Move rejected: socket.id', socket.id, 'not found in socketToRoom');
+            return;
+        }
+        
+        const roomState = rooms[roomId];
+        if (!roomState || !roomState.gameStarted || roomState.winner) {
+            console.log('Move rejected: roomState invalid, gameStarted:', roomState?.gameStarted, 'winner:', roomState?.winner);
+            return;
+        }
+        if (roomState.deadPlayers[socket.id]) {
+            console.log('Move rejected: player is dead');
+            return;
+        }
+
+        const from = data.from;
+        const to = data.to;
+        const splitMove = data.splitMove;
+        const playerColor = roomState.players[socket.id];
+        console.log('Move attempt by socket.id:', socket.id, 'playerColor:', playerColor, 'from:', from, 'to:', to);
+        
+        if (isValidMove(roomState, socket.id, from, to)) {
+            executeMove(roomId, socket.id, from, to, splitMove || false);
+        } else {
+            console.log('Move rejected: isValidMove returned false. Players map:', Object.keys(roomState.players));
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Player disconnected:', socket.id);
+        const roomId = getRoomIdBySocketId(socket.id);
+        
+        if (roomId) {
+            const roomState = rooms[roomId];
+            
+            if (roomState) {
+                const playerSessionToken = roomState.playerSessionTokens[socket.id];
+                
+                if (roomState.gameStarted && !roomState.deadPlayers[socket.id] && playerSessionToken) {
+                    markPlayerDisconnected(roomId, socket.id, playerSessionToken);
+                    delete socketToRoom[socket.id];
+                    return;
+                }
+                
+                if (roomState.gameStarted && !roomState.deadPlayers[socket.id]) {
+                    eliminatePlayer(roomId, socket.id, null, 'disconnect');
+                }
+                
+                delete roomState.players[socket.id];
+                delete roomState.playerClasses[socket.id];
+                delete roomState.playerNames[socket.id];
+                delete roomState.playerColors[socket.id];
+                delete roomState.playerSessionTokens[socket.id];
+                delete roomState.deadPlayers[socket.id];
+                roomState.playerCount = Object.keys(roomState.players).length;
+                
+                if (Object.keys(roomState.players).length === 0) {
+                    cleanupRoom(roomId);
+                } else {
+                    if (socket.id === roomState.hostSocketId) {
+                        promoteNewHost(roomId);
+                    }
+                    
+                    if (!roomState.gameStarted) {
+                        broadcastRoomInfo(roomId);
+                        broadcastPlayerNames(roomId);
+                    }
+                }
+            }
+            
+            delete socketToRoom[socket.id];
+        }
+    });
+
+    socket.on('requestReset', () => {
+        const roomId = getRoomIdBySocketId(socket.id);
+        if (!roomId) return;
+        
+        const roomState = rooms[roomId];
+        if (!roomState) return;
+        
+        if (roomState.winner || !roomState.gameStarted) {
+            resetRoomForNewMatch(roomId);
+        }
+    });
+
+    socket.on('leaveRoom', () => {
+        const roomId = getRoomIdBySocketId(socket.id);
+        if (!roomId) return;
+        
+        const roomState = rooms[roomId];
+        if (roomState) {
+            delete roomState.players[socket.id];
+            delete roomState.playerClasses[socket.id];
+            delete roomState.playerNames[socket.id];
+            delete roomState.playerColors[socket.id];
+            delete roomState.playerSessionTokens[socket.id];
+            roomState.playerCount = Object.keys(roomState.players).length;
+            
+            socket.leave(roomId);
+            
+            if (Object.keys(roomState.players).length === 0) {
+                cleanupRoom(roomId);
+            } else {
+                if (socket.id === roomState.hostSocketId) {
+                    promoteNewHost(roomId);
+                }
+                broadcastRoomInfo(roomId);
+                broadcastPlayerNames(roomId);
+            }
+        }
+        
+        delete socketToRoom[socket.id];
+        socket.emit('leftRoom');
+    });
+
+    socket.on('send_message', (data) => {
+        const roomId = getRoomIdBySocketId(socket.id);
+        if (!roomId) return;
+        
+        const roomState = rooms[roomId];
+        if (!roomState) return;
+        
+        const text = data.text;
+        if (!text || text.trim().length === 0) return;
+        
+        const nickname = roomState.playerNames[socket.id] || 'Anonimo';
+        const playerColor = roomState.players[socket.id] || 'white';
+        
+        const sanitizedText = text.trim().substring(0, 100);
+        
+        io.to(roomId).emit('new_message', {
+            nickname: nickname,
+            text: sanitizedText,
+            color: playerColor,
+            timestamp: Date.now()
+        });
+    });
+
+    socket.on('get_ranking', () => {
+        const ranking = getTopRanking(10);
+        socket.emit('ranking_data', { ranking: ranking });
+    });
+}
+
 function tryReconnectPlayer(socket, sessionToken) {
     const disconnectedPlayer = disconnectedPlayers[sessionToken];
     if (!disconnectedPlayer) return false;
@@ -979,6 +1142,9 @@ function tryReconnectPlayer(socket, sessionToken) {
     console.log('  socketToRoom[' + newSocketId + '] =', socketToRoom[newSocketId]);
     console.log('  roomState.players[' + newSocketId + '] =', roomState.players[newSocketId]);
     console.log('  All players in room:', Object.keys(roomState.players));
+    
+    setupGameListeners(socket);
+    console.log('Game listeners attached for reconnected socket:', socket.id);
     
     socket.emit('reconnected', {
         roomId: roomId,
@@ -1146,6 +1312,9 @@ io.on('connection', (socket) => {
                     console.log('  roomState.players[' + socket.id + '] =', roomState.players[socket.id]);
                     console.log('  All players in room:', Object.keys(roomState.players));
                     
+                    setupGameListeners(socket);
+                    console.log('Game listeners attached for joinRoom reconnected socket:', socket.id);
+                    
                     socket.emit('reconnected', {
                         roomId: upperRoomId,
                         color: playerColor,
@@ -1244,153 +1413,7 @@ io.on('connection', (socket) => {
         console.log('Host ' + socket.id + ' started game in room ' + roomId);
     });
 
-    console.log('Registering move handler for socket:', socket.id, 'alreadyReconnected:', alreadyReconnected);
-    socket.on('move', (data) => {
-        console.log('Move event received from socket:', socket.id);
-        const roomId = getRoomIdBySocketId(socket.id);
-        if (!roomId) {
-            console.log('Move rejected: socket.id', socket.id, 'not found in socketToRoom');
-            return;
-        }
-        
-        const roomState = rooms[roomId];
-        if (!roomState || !roomState.gameStarted || roomState.winner) {
-            console.log('Move rejected: roomState invalid, gameStarted:', roomState?.gameStarted, 'winner:', roomState?.winner);
-            return;
-        }
-        if (roomState.deadPlayers[socket.id]) {
-            console.log('Move rejected: player is dead');
-            return;
-        }
-
-        const from = data.from;
-        const to = data.to;
-        const splitMove = data.splitMove;
-        const playerColor = roomState.players[socket.id];
-        console.log('Move attempt by socket.id:', socket.id, 'playerColor:', playerColor, 'from:', from, 'to:', to);
-        
-        if (isValidMove(roomState, socket.id, from, to)) {
-            executeMove(roomId, socket.id, from, to, splitMove || false);
-        } else {
-            console.log('Move rejected: isValidMove returned false. Players map:', Object.keys(roomState.players));
-        }
-    });
-
-    socket.on('disconnect', () => {
-        console.log('Player disconnected:', socket.id);
-        const roomId = getRoomIdBySocketId(socket.id);
-        
-        if (roomId) {
-            const roomState = rooms[roomId];
-            
-            if (roomState) {
-                const playerSessionToken = roomState.playerSessionTokens[socket.id];
-                
-                if (roomState.gameStarted && !roomState.deadPlayers[socket.id] && playerSessionToken) {
-                    markPlayerDisconnected(roomId, socket.id, playerSessionToken);
-                    delete socketToRoom[socket.id];
-                    return;
-                }
-                
-                if (roomState.gameStarted && !roomState.deadPlayers[socket.id]) {
-                    eliminatePlayer(roomId, socket.id, null, 'disconnect');
-                }
-                
-                delete roomState.players[socket.id];
-                delete roomState.playerClasses[socket.id];
-                delete roomState.playerNames[socket.id];
-                delete roomState.playerColors[socket.id];
-                delete roomState.playerSessionTokens[socket.id];
-                delete roomState.deadPlayers[socket.id];
-                roomState.playerCount = Object.keys(roomState.players).length;
-                
-                if (Object.keys(roomState.players).length === 0) {
-                    cleanupRoom(roomId);
-                } else {
-                    if (socket.id === roomState.hostSocketId) {
-                        promoteNewHost(roomId);
-                    }
-                    
-                    if (!roomState.gameStarted) {
-                        broadcastRoomInfo(roomId);
-                        broadcastPlayerNames(roomId);
-                    }
-                }
-            }
-            
-            delete socketToRoom[socket.id];
-        }
-    });
-
-    socket.on('requestReset', () => {
-        const roomId = getRoomIdBySocketId(socket.id);
-        if (!roomId) return;
-        
-        const roomState = rooms[roomId];
-        if (!roomState) return;
-        
-        if (roomState.winner || !roomState.gameStarted) {
-            resetRoomForNewMatch(roomId);
-        }
-    });
-
-    socket.on('leaveRoom', () => {
-        const roomId = getRoomIdBySocketId(socket.id);
-        if (!roomId) return;
-        
-        const roomState = rooms[roomId];
-        if (roomState) {
-            delete roomState.players[socket.id];
-            delete roomState.playerClasses[socket.id];
-            delete roomState.playerNames[socket.id];
-            delete roomState.playerColors[socket.id];
-            delete roomState.playerSessionTokens[socket.id];
-            roomState.playerCount = Object.keys(roomState.players).length;
-            
-            socket.leave(roomId);
-            
-            if (Object.keys(roomState.players).length === 0) {
-                cleanupRoom(roomId);
-            } else {
-                if (socket.id === roomState.hostSocketId) {
-                    promoteNewHost(roomId);
-                }
-                broadcastRoomInfo(roomId);
-                broadcastPlayerNames(roomId);
-            }
-        }
-        
-        delete socketToRoom[socket.id];
-        socket.emit('leftRoom');
-    });
-
-    socket.on('send_message', (data) => {
-        const roomId = getRoomIdBySocketId(socket.id);
-        if (!roomId) return;
-        
-        const roomState = rooms[roomId];
-        if (!roomState) return;
-        
-        const text = data.text;
-        if (!text || text.trim().length === 0) return;
-        
-        const nickname = roomState.playerNames[socket.id] || 'Anonimo';
-        const playerColor = roomState.players[socket.id] || 'white';
-        
-        const sanitizedText = text.trim().substring(0, 100);
-        
-        io.to(roomId).emit('new_message', {
-            nickname: nickname,
-            text: sanitizedText,
-            color: playerColor,
-            timestamp: Date.now()
-        });
-    });
-
-    socket.on('get_ranking', () => {
-        const ranking = getTopRanking(10);
-        socket.emit('ranking_data', { ranking: ranking });
-    });
+    setupGameListeners(socket);
 });
 
 const PORT = process.env.PORT || 3000;

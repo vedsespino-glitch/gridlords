@@ -617,6 +617,13 @@ function connectToServer(selectedClass) {
         if (chatContainer) {
             chatContainer.classList.remove('hidden');
         }
+        
+        console.log('Sending ping_reconnect to verify channel is open...');
+        socket.emit('ping_reconnect', { roomId: currentRoomId, timestamp: Date.now() });
+    });
+    
+    socket.on('pong_reconnect', (data) => {
+        console.log('pong_reconnect received! Channel is open. Server confirmed socket.id:', data.socketId);
     });
 
     socket.on('playerReconnected', (data) => {
