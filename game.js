@@ -1086,6 +1086,18 @@ function render() {
         }
     }
 
+    // VISUAL FEEDBACK: Draw tap highlight if active (bright white border)
+    if (highlightCell) {
+        const hx = highlightCell.x * cellSize;
+        const hy = highlightCell.y * cellSize;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 4;
+        ctx.shadowColor = '#00ffff';
+        ctx.shadowBlur = 10;
+        ctx.strokeRect(hx + 2, hy + 2, cellSize - 4, cellSize - 4);
+        ctx.shadowBlur = 0;
+    }
+
     // Draw grid lines with subtle gray color for light map theme
     ctx.strokeStyle = '#d0d0d0';
     ctx.lineWidth = 1;
@@ -1187,11 +1199,10 @@ function findPath(from, to, grid) {
             
             // Found destination
             if (nx === to.x && ny === to.y) {
-                // ATTACK MOVE: Truncate path at first enemy cell
-                // This ensures we attack the blocking enemy instead of committing to a chain of attacks
-                const truncatedPath = truncatePathAtFirstEnemy(newPath, grid);
-                console.log('🗺️ Path found:', newPath.length, 'steps, truncated to:', truncatedPath.length, 'steps (Attack Move)');
-                return truncatedPath;
+                // STEAMROLLER MODE: Return full path to destination
+                // Unit will attack enemies along the way and continue until reaching destination
+                console.log('🗺️ Path found:', newPath.length, 'steps (Steamroller Mode - full path)');
+                return newPath;
             }
             
             visited.add(key);
@@ -1309,16 +1320,9 @@ function executeAutoMove(path, useSplitMove) {
             console.warn('Audio error ignorado:', error);
         }
         
-        // CASE C: Interaction (enemy/structure) - BREAK immediately after action
-        if (isInteraction) {
-            console.log('🛑 Auto-move BREAK: interaction complete (attack/capture)');
-            isAutoMoving = false;
-            selectedCell = null;
-            statusEl.textContent = 'Listo';
-            statusEl.style.background = '#3498db';
-            render();
-            return;
-        }
+        // STEAMROLLER MODE: Continue after interaction (attack/capture)
+        // Only break if unit dies (checked via game state update) or invalid move
+        // The server will handle combat resolution - we just keep moving
         
         // Update current position for next step
         currentFrom = { x: nextCell.x, y: nextCell.y };
@@ -1326,17 +1330,19 @@ function executeAutoMove(path, useSplitMove) {
         
         // Check if this was the last step
         if (currentIndex >= path.length) {
-            console.log('✅ Auto-move complete');
+            console.log('✅ Auto-move complete (Steamroller Mode)');
             isAutoMoving = false;
             selectedCell = null;
-            statusEl.textContent = 'Auto-movimiento completado';
+            statusEl.textContent = 'Destino alcanzado';
             statusEl.style.background = '#27ae60';
             render();
             return;
         }
         
-        // CASE A: Empty/friendly cell - wait 700ms then continue
-        statusEl.textContent = `Auto-moviendo... (${currentIndex}/${path.length})`;
+        // Continue to next step after delay (both for empty cells and after combat)
+        statusEl.textContent = isInteraction 
+            ? `Atacando... (${currentIndex}/${path.length})`
+            : `Auto-moviendo... (${currentIndex}/${path.length})`;
         autoMoveTimeoutId = setTimeout(executeNextStep, AUTO_MOVE_INTERVAL);
     }
     
@@ -1521,10 +1527,21 @@ function handleCanvasInput(event) {
 // ============================================
 // TOUCH THRESHOLD: Differentiate tap vs drag on mobile
 // ============================================
-const TOUCH_THRESHOLD = 15; // pixels - if moved more than this, it's a drag/scroll
+const TOUCH_THRESHOLD = 30; // pixels - increased for finger imprecision (was 15px)
 let touchStartX = null;
 let touchStartY = null;
 let touchStartTime = null;
+let highlightCell = null; // For visual feedback on tap
+
+// Visual highlight function - draws a bright border on touched cell
+function drawTapHighlight(cellX, cellY) {
+    highlightCell = { x: cellX, y: cellY };
+    render(); // Re-render to show highlight
+    setTimeout(() => {
+        highlightCell = null;
+        render(); // Clear highlight after 150ms
+    }, 150);
+}
 
 // Use pointerdown for mouse/pen only - touch is handled by touchend
 canvas.addEventListener('pointerdown', (event) => {
@@ -1537,8 +1554,15 @@ canvas.addEventListener('pointerdown', (event) => {
     handleCanvasInput(event);
 });
 
-// TOUCH START: Save coordinates, don't execute game logic yet
+// TOUCH START: Save coordinates, force unlock any stuck auto-move
 canvas.addEventListener('touchstart', (event) => {
+    // FORCE UNLOCK: Break any stuck auto-move from previous failed movement
+    if (isAutoMoving) {
+        console.log('📱 Force unlock: Breaking stuck auto-move on touchstart');
+        isAutoMoving = false;
+        autoMoveCancelToken++;
+    }
+    
     const touch = event.touches[0];
     touchStartX = touch.clientX;
     touchStartY = touch.clientY;
@@ -1585,6 +1609,13 @@ canvas.addEventListener('touchend', (event) => {
         preventDefault: () => {},
         target: event.target
     };
+    
+    // VISUAL FEEDBACK: Show highlight on tapped cell immediately
+    const tappedCell = getCellFromMouse(syntheticEvent);
+    if (tappedCell) {
+        drawTapHighlight(tappedCell.x, tappedCell.y);
+    }
+    
     handleCanvasInput(syntheticEvent);
 }, { passive: true });
 
