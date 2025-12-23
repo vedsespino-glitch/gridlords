@@ -29,6 +29,8 @@ const waitingMessage = document.getElementById('waitingMessage');
 const leaveRoomBtn = document.getElementById('leaveRoomBtn');
 const roomInfoEl = document.getElementById('room-info');
 const currentRoomCodeEl = document.getElementById('currentRoomCode');
+const copyLinkBtn = document.getElementById('copyLinkBtn');
+const copyLinkBtnHud = document.getElementById('copyLinkBtnHud');
 
 // Chat UI elements
 const chatContainer = document.getElementById('chat-container');
@@ -476,6 +478,9 @@ function connectToServer(selectedClass) {
         roomCodeDisplay.textContent = data.roomId;
         currentRoomCodeEl.textContent = data.roomId;
         
+        // DEEP LINKING: Update URL with room code
+        window.history.pushState({}, '', '?room=' + data.roomId);
+        
         classModal.classList.add('hidden');
         lobbyOverlay.classList.remove('hidden');
         
@@ -497,6 +502,9 @@ function connectToServer(selectedClass) {
         currentRoomId = data.roomId;
         roomCodeDisplay.textContent = data.roomId;
         currentRoomCodeEl.textContent = data.roomId;
+        
+        // DEEP LINKING: Update URL with room code
+        window.history.pushState({}, '', '?room=' + data.roomId);
         
         classModal.classList.add('hidden');
         lobbyOverlay.classList.remove('hidden');
@@ -571,6 +579,9 @@ function connectToServer(selectedClass) {
         playerColor = null;
         gameStarted = false;
         hasCenteredOnPlayer = false;
+        
+        // DEEP LINKING: Clear URL when leaving room
+        window.history.pushState({}, '', '/');
         
         // Hide mobile mode toggle button when leaving room
         const modeToggleBtn = document.getElementById('modeToggleBtn');
@@ -1638,6 +1649,7 @@ createRoomBtn.addEventListener('click', () => {
         return;
     }
     playerNickname = nickname;
+    localStorage.setItem('pixelking_nickname', nickname);
     pendingAction = 'create';
     loginOverlay.classList.add('hidden');
     classModal.classList.remove('hidden');
@@ -1659,6 +1671,7 @@ joinRoomBtn.addEventListener('click', () => {
     }
     
     playerNickname = nickname;
+    localStorage.setItem('pixelking_nickname', nickname);
     pendingAction = 'join';
     loginOverlay.classList.add('hidden');
     classModal.classList.remove('hidden');
@@ -1993,33 +2006,85 @@ if (zoomOutBtn) {
 }
 
 // ============================================
-// MAGIC LINK: Auto-join via URL parameters
-// Usage: gridlords.onrender.com/?room=ABCD&user=Dorian
+// COPY LINK: Copy room link to clipboard
 // ============================================
-(function initMagicLink() {
+function copyRoomLink() {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(() => {
+        showToast('Link copiado!');
+    }).catch(() => {
+        showToast('Error al copiar');
+    });
+}
+
+function showToast(message) {
+    let toast = document.getElementById('toast-notification');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast-notification';
+        toast.className = 'toast-notification';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 2000);
+}
+
+if (copyLinkBtn) {
+    copyLinkBtn.addEventListener('click', copyRoomLink);
+}
+
+if (copyLinkBtnHud) {
+    copyLinkBtnHud.addEventListener('click', copyRoomLink);
+}
+
+// ============================================
+// DEEP LINKING: Auto-join via URL parameters
+// Usage: gridlords.onrender.com/?room=ABCD (nickname from localStorage)
+// Or: gridlords.onrender.com/?room=ABCD&user=Dorian (nickname from URL)
+// ============================================
+(function initDeepLink() {
     const urlParams = new URLSearchParams(window.location.search);
-    const magicRoom = urlParams.get('room');
-    const magicUser = urlParams.get('user');
+    const roomCode = urlParams.get('room');
+    const urlUser = urlParams.get('user');
+    const savedNickname = localStorage.getItem('pixelking_nickname');
     
-    if (magicRoom && magicUser) {
-        console.log('🔗 Magic Link detected - Room:', magicRoom, 'User:', magicUser);
+    if (!roomCode) return;
+    
+    const roomCodeUpper = roomCode.toUpperCase();
+    console.log('🔗 Deep Link detected - Room:', roomCodeUpper);
+    
+    // Pre-fill room code
+    if (roomCodeInput) {
+        roomCodeInput.value = roomCodeUpper;
+    }
+    
+    // Hide "Create Room" button when joining via link
+    if (createRoomBtn) {
+        createRoomBtn.style.display = 'none';
+    }
+    
+    // Determine nickname: URL param > localStorage > prompt user
+    const nickname = urlUser || savedNickname;
+    
+    if (nickname) {
+        console.log('🔗 Deep Link: Auto-joining with nickname:', nickname);
         
         // Store magic link data for use after class selection
         window.magicLinkData = {
-            room: magicRoom.toUpperCase(),
-            user: magicUser
+            room: roomCodeUpper,
+            user: nickname
         };
         
-        // Pre-fill the form fields
+        // Pre-fill nickname
         if (nicknameInput) {
-            nicknameInput.value = magicUser;
-        }
-        if (roomCodeInput) {
-            roomCodeInput.value = magicRoom.toUpperCase();
+            nicknameInput.value = nickname;
         }
         
         // Set pending action to join
-        playerNickname = magicUser;
+        playerNickname = nickname;
         pendingAction = 'join';
         
         // Hide login overlay and show class selection directly
@@ -2030,6 +2095,16 @@ if (zoomOutBtn) {
             classModal.classList.remove('hidden');
         }
         
-        console.log('🔗 Magic Link: Mostrando selección de clase. Selecciona tu clase para unirte automáticamente a la sala', magicRoom.toUpperCase());
+        console.log('🔗 Deep Link: Mostrando selección de clase. Selecciona tu clase para unirte automáticamente a la sala', roomCodeUpper);
+    } else {
+        console.log('🔗 Deep Link: No nickname found, prompting user');
+        
+        // Focus on nickname input and update button text
+        if (nicknameInput) {
+            nicknameInput.focus();
+        }
+        if (joinRoomBtn) {
+            joinRoomBtn.textContent = 'Unirse a ' + roomCodeUpper;
+        }
     }
 })();
