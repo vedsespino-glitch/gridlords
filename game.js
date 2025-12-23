@@ -1175,6 +1175,7 @@ function handleCanvasInput(event) {
             const useSplitMove = mobileSplitMode || isSplitMove;
             
             // CRITICAL: Send move to server FIRST, before any audio
+            console.log('🚀 Emitting move:', { from: selectedCell, to: clickedCell, splitMove: useSplitMove }, 'socket.connected:', socket?.connected);
             socket.emit('move', {
                 from: selectedCell,
                 to: clickedCell,
@@ -1212,6 +1213,10 @@ function handleCanvasInput(event) {
             const modeLabel = mobileSplitMode ? 'DIVIDIR' : 'MOVER';
             statusEl.textContent = `Celda seleccionada (${modeLabel}) - Toca una celda vecina`;
             statusEl.style.background = mobileSplitMode ? '#e67e22' : '#3498db';
+            console.log('✅ Selected cell:', clickedCell, 'troops:', cell.troops);
+        } else {
+            // Debug: Log why selection was rejected
+            console.warn('❌ Rechazo de selección: DueñoCelda:', cell.owner, 'Tropas:', cell.troops, 'vs MiColor:', playerColor);
         }
     }
 

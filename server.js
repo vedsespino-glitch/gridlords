@@ -999,15 +999,24 @@ function tryReconnectPlayer(socket, sessionToken) {
 io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
     
+    // Track if this is a reconnection - we still need to register event handlers
+    let isReconnection = false;
     const sessionToken = socket.handshake.auth.sessionToken;
     if (sessionToken && disconnectedPlayers[sessionToken]) {
         console.log('Attempting reconnection with token:', sessionToken);
         if (tryReconnectPlayer(socket, sessionToken)) {
-            return;
+            isReconnection = true;
+            console.log('Reconnection successful, registering event handlers for socket:', socket.id);
+            // NOTE: Do NOT return here! We must continue to register event handlers below
         }
     }
 
     socket.on('createRoom', (data) => {
+        // Reconnected players shouldn't create new rooms
+        if (isReconnection) {
+            socket.emit('error', { message: 'Already reconnected to a game' });
+            return;
+        }
         const nickname = data.nickname;
         const playerClass = data.playerClass;
         const playerSessionToken = data.sessionToken;
