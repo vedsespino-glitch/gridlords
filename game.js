@@ -1407,12 +1407,38 @@ function handleCanvasInput(event) {
 
     if (selectedCell) {
         if (clickedCell.x === selectedCell.x && clickedCell.y === selectedCell.y) {
-            // Tapping same cell deselects
-            selectedCell = null;
-            isSplitMove = false;
-            statusEl.textContent = 'Seleccion cancelada';
-            statusEl.style.background = '#9b59b6';
+            // SAME CELL: Toggle split mode (instead of deselecting)
+            // This allows quick split preparation without double-click timing issues
+            const selectedCellData = gameState.grid[selectedCell.y][selectedCell.x];
+            if (selectedCellData.owner === playerColor && selectedCellData.troops >= 2 && !isSplitMove) {
+                // Enable split mode
+                isSplitMove = true;
+                const splitTroops = Math.floor(selectedCellData.troops / 2);
+                statusEl.textContent = `Split Mode: ${splitTroops} tropas listas`;
+                statusEl.style.background = '#e67e22';
+                console.log('🔀 Split mode activated via same-cell tap');
+                try {
+                    AudioManager.play('split');
+                } catch (error) {
+                    console.warn('Audio error ignorado:', error);
+                }
+            } else if (isSplitMove) {
+                // Already in split mode - deselect
+                selectedCell = null;
+                isSplitMove = false;
+                statusEl.textContent = 'Seleccion cancelada';
+                statusEl.style.background = '#9b59b6';
+                console.log('🔀 Split mode deactivated, cell deselected');
+            } else {
+                // Can't split (not owned or not enough troops) - deselect
+                selectedCell = null;
+                isSplitMove = false;
+                statusEl.textContent = 'Seleccion cancelada';
+                statusEl.style.background = '#9b59b6';
+            }
         } else if (isAdjacent(selectedCell, clickedCell)) {
+            // VECINO INSTANTÁNEO: Adjacent moves (distance=1) are IMMEDIATE
+            // No pathfinding, no 700ms delay - just emit directly
             // Use mobileSplitMode if active, otherwise use isSplitMove (from double-click)
             const useSplitMove = mobileSplitMode || isSplitMove;
             
@@ -1437,7 +1463,8 @@ function handleCanvasInput(event) {
                 console.warn('Audio error ignorado:', error);
             }
         } else if (cell.terrain !== TERRAIN.MOUNTAIN) {
-            // NON-ADJACENT CELL: Try pathfinding for auto-move
+            // AUTO-MOVE (DISTANCE > 1): Only use pathfinding for non-adjacent cells
+            // This is the "strategic" slow movement with 700ms per step
             const useSplitMove = mobileSplitMode || isSplitMove;
             const path = findPath(selectedCell, clickedCell, gameState.grid);
             
