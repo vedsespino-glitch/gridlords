@@ -1507,22 +1507,75 @@ function handleCanvasInput(event) {
     render();
 }
 
-// Use pointerdown for unified mouse/touch handling (better mobile support)
+// ============================================
+// TOUCH THRESHOLD: Differentiate tap vs drag on mobile
+// ============================================
+const TOUCH_THRESHOLD = 15; // pixels - if moved more than this, it's a drag/scroll
+let touchStartX = null;
+let touchStartY = null;
+let touchStartTime = null;
+
+// Use pointerdown for mouse/pen only - touch is handled by touchend
 canvas.addEventListener('pointerdown', (event) => {
-    // Prevent default to avoid double-firing on touch devices
+    // Skip touch events - they're handled by touchstart/touchend with threshold logic
+    if (event.pointerType === 'touch') {
+        return; // Let touch events handle this
+    }
+    // Mouse/pen: handle immediately
     event.preventDefault();
     handleCanvasInput(event);
 });
 
-// MOBILE STABILITY: Prevent browser zoom/scroll gestures on canvas
-// Must use { passive: false } to allow preventDefault() on touch events
+// TOUCH START: Save coordinates, don't execute game logic yet
 canvas.addEventListener('touchstart', (event) => {
-    event.preventDefault();
-}, { passive: false });
+    const touch = event.touches[0];
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    touchStartTime = Date.now();
+    // Don't preventDefault - allow native scroll to work
+}, { passive: true });
 
+// TOUCH MOVE: Allow native scroll, no game logic
 canvas.addEventListener('touchmove', (event) => {
-    event.preventDefault();
-}, { passive: false });
+    // Don't preventDefault - allow native scroll
+}, { passive: true });
+
+// TOUCH END: Decide if it's a tap or drag based on distance
+canvas.addEventListener('touchend', (event) => {
+    if (touchStartX === null || touchStartY === null) return;
+    
+    const touch = event.changedTouches[0];
+    const endX = touch.clientX;
+    const endY = touch.clientY;
+    
+    // Calculate Manhattan distance moved
+    const distance = Math.abs(endX - touchStartX) + Math.abs(endY - touchStartY);
+    
+    // Reset touch state
+    const startX = touchStartX;
+    const startY = touchStartY;
+    touchStartX = null;
+    touchStartY = null;
+    touchStartTime = null;
+    
+    // If distance > threshold, it's a scroll/drag - ignore
+    if (distance > TOUCH_THRESHOLD) {
+        console.log('📱 Touch ignored (drag/scroll):', distance, 'px');
+        return;
+    }
+    
+    // It's a tap! Execute game logic
+    console.log('📱 Touch tap detected:', distance, 'px');
+    
+    // Create a synthetic event with the touch coordinates for handleCanvasInput
+    const syntheticEvent = {
+        clientX: endX,
+        clientY: endY,
+        preventDefault: () => {},
+        target: event.target
+    };
+    handleCanvasInput(syntheticEvent);
+}, { passive: true });
 
 // Fallback click handler for older browsers
 canvas.addEventListener('click', (event) => {
