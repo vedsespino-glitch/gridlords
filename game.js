@@ -584,6 +584,7 @@ function connectToServer(selectedClass) {
 
     socket.on('reconnected', (data) => {
         console.log('Successfully reconnected to game!', data);
+        console.log('Reconnection state - gameStarted from server:', data.gameStarted, 'playerColor:', data.color);
         alreadyReconnected = true;
         pendingAction = null;
         playerColor = data.color;
@@ -592,6 +593,7 @@ function connectToServer(selectedClass) {
         gameStarted = data.gameStarted;
         isHost = data.isHost;
         saveRoomId(data.roomId);
+        console.log('After reconnection - gameStarted:', gameStarted, 'playerColor:', playerColor, 'gameState:', !!gameState);
         
         const classLabel = playerClass === 'tank' ? 'Tank' : (playerClass === 'scout' ? 'Scout' : 'Rusher');
         const classIcon = playerClass === 'tank' ? '🛡️' : (playerClass === 'scout' ? '🐴' : '⚡');
@@ -654,6 +656,7 @@ function connectToServer(selectedClass) {
     });
 
     socket.on('gameState', (state) => {
+        console.log('gameState received. grid exists:', !!state?.grid, 'winner:', state?.winner, 'gameStarted:', gameStarted, 'playerColor:', playerColor);
         // Detect ownership changes (attacks) by comparing with previous state
         let playerLostCell = false;
         if (previousGameState && previousGameState.grid && state.grid) {
@@ -1107,7 +1110,11 @@ function updateMatchInfo() {
 
 // Unified handler for both mouse and touch input
 function handleCanvasInput(event) {
-    if (!gameState || !gameStarted || gameState.winner) return;
+    console.log('handleCanvasInput called. gameState:', !!gameState, 'gameStarted:', gameStarted, 'winner:', gameState?.winner, 'playerColor:', playerColor, 'socket.connected:', socket?.connected);
+    if (!gameState || !gameStarted || gameState.winner) {
+        console.log('handleCanvasInput early return - gameState:', !!gameState, 'gameStarted:', gameStarted, 'winner:', gameState?.winner);
+        return;
+    }
 
     const clickedCell = getCellFromMouse(event);
     if (!clickedCell) return;
