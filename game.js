@@ -1168,7 +1168,7 @@ function findPath(from, to, grid) {
             const cell = grid[ny][nx];
             
             // Check if cell is passable (not mountain)
-            if (cell.terrain === 'mountain') continue;
+            if (cell.terrain === TERRAIN.MOUNTAIN) continue;
             
             // ATTACK MOVE: Allow ALL non-mountain cells (including enemy cells)
             // This enables aggressive pathfinding that goes through enemies
@@ -1266,7 +1266,7 @@ function executeAutoMove(path, useSplitMove) {
         const fromCell = gameState.grid[currentFrom.y]?.[currentFrom.x];
         const toCell = gameState.grid[nextCell.y]?.[nextCell.x];
         
-        if (!fromCell || !toCell || toCell.terrain === 'mountain') {
+        if (!fromCell || !toCell || toCell.terrain === TERRAIN.MOUNTAIN) {
             console.log('🛑 Auto-move stopped: invalid cell');
             isAutoMoving = false;
             statusEl.textContent = 'Ruta bloqueada';
@@ -1377,11 +1377,14 @@ function handleCanvasInput(event) {
         '| socket:', socket ? socket.id : 'null',
         '| isAutoMoving:', isAutoMoving);
     
-    // Cancel auto-move if user clicks during auto-move
+    // CLICK OVERRIDE: If user clicks during auto-move, cancel silently and process the click immediately
+    // This gives the player absolute authority - no waiting for auto-move to finish
     if (isAutoMoving) {
-        cancelAutoMove();
-        render();
-        return;
+        // Silent cancel - just stop the auto-move without showing "cancelado" message
+        autoMoveCancelToken++;
+        isAutoMoving = false;
+        console.log('🛑 Auto-move overridden by user click');
+        // DON'T return - continue to process the click below
     }
     
     if (!gameState || !gameStarted || gameState.winner) {
@@ -1425,7 +1428,7 @@ function handleCanvasInput(event) {
             } catch (error) {
                 console.warn('Audio error ignorado:', error);
             }
-        } else if (cell.terrain !== 'mountain') {
+        } else if (cell.terrain !== TERRAIN.MOUNTAIN) {
             // NON-ADJACENT CELL: Try pathfinding for auto-move
             const useSplitMove = mobileSplitMode || isSplitMove;
             const path = findPath(selectedCell, clickedCell, gameState.grid);
@@ -1453,7 +1456,7 @@ function handleCanvasInput(event) {
     } else {
         // CLIENT-SIDE BYPASS: Allow selecting ANY cell - server will validate ownership
         // This fixes reconnection issues where playerColor doesn't match cell.owner
-        if (cell.terrain !== 'mountain') {
+        if (cell.terrain !== TERRAIN.MOUNTAIN) {
             selectedCell = clickedCell;
             isSplitMove = false;
             const modeLabel = mobileSplitMode ? 'DIVIDIR' : 'MOVER';
