@@ -1194,29 +1194,35 @@ function handleCanvasInput(event) {
             } catch (error) {
                 console.warn('Audio error ignorado:', error);
             }
-        } else if (cell.owner === playerColor && cell.troops > 1) {
-            // Select a different owned cell
+        } else if (cell.terrain !== 'mountain') {
+            // CLIENT-SIDE BYPASS: Allow selecting ANY non-mountain cell
+            // Server will validate if the move is legal
             selectedCell = clickedCell;
             isSplitMove = false;
             const modeLabel = mobileSplitMode ? 'DIVIDIR' : 'MOVER';
-            statusEl.textContent = `Celda seleccionada (${modeLabel}) - Toca una celda vecina`;
+            const ownerInfo = cell.owner ? `(${cell.owner})` : '(vacía)';
+            statusEl.textContent = `Celda seleccionada ${ownerInfo} - Toca una celda vecina`;
             statusEl.style.background = mobileSplitMode ? '#e67e22' : '#3498db';
+            console.log('✅ Re-selected cell:', clickedCell, 'owner:', cell.owner, 'troops:', cell.troops);
         } else {
-            // Invalid target - deselect
+            // Mountain - deselect
             selectedCell = null;
             isSplitMove = false;
+            console.log('🏔️ Montaña - deseleccionando');
         }
     } else {
-        if (cell.owner === playerColor && cell.troops > 1) {
+        // CLIENT-SIDE BYPASS: Allow selecting ANY cell - server will validate ownership
+        // This fixes reconnection issues where playerColor doesn't match cell.owner
+        if (cell.terrain !== 'mountain') {
             selectedCell = clickedCell;
             isSplitMove = false;
             const modeLabel = mobileSplitMode ? 'DIVIDIR' : 'MOVER';
-            statusEl.textContent = `Celda seleccionada (${modeLabel}) - Toca una celda vecina`;
+            const ownerInfo = cell.owner ? `(${cell.owner})` : '(vacía)';
+            statusEl.textContent = `Celda seleccionada ${ownerInfo} - Toca una celda vecina`;
             statusEl.style.background = mobileSplitMode ? '#e67e22' : '#3498db';
-            console.log('✅ Selected cell:', clickedCell, 'troops:', cell.troops);
+            console.log('✅ Selected cell:', clickedCell, 'owner:', cell.owner, 'troops:', cell.troops, 'myColor:', playerColor);
         } else {
-            // Debug: Log why selection was rejected
-            console.warn('❌ Rechazo de selección: DueñoCelda:', cell.owner, 'Tropas:', cell.troops, 'vs MiColor:', playerColor);
+            console.log('🏔️ Montaña - no seleccionable');
         }
     }
 
@@ -1644,3 +1650,45 @@ if (zoomInBtn) {
 if (zoomOutBtn) {
     zoomOutBtn.addEventListener('click', zoomOut);
 }
+
+// ============================================
+// MAGIC LINK: Auto-join via URL parameters
+// Usage: gridlords.onrender.com/?room=ABCD&user=Dorian
+// ============================================
+(function initMagicLink() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const magicRoom = urlParams.get('room');
+    const magicUser = urlParams.get('user');
+    
+    if (magicRoom && magicUser) {
+        console.log('🔗 Magic Link detected - Room:', magicRoom, 'User:', magicUser);
+        
+        // Store magic link data for use after class selection
+        window.magicLinkData = {
+            room: magicRoom.toUpperCase(),
+            user: magicUser
+        };
+        
+        // Pre-fill the form fields
+        if (nicknameInput) {
+            nicknameInput.value = magicUser;
+        }
+        if (roomCodeInput) {
+            roomCodeInput.value = magicRoom.toUpperCase();
+        }
+        
+        // Set pending action to join
+        playerNickname = magicUser;
+        pendingAction = 'join';
+        
+        // Hide login overlay and show class selection directly
+        if (loginOverlay) {
+            loginOverlay.classList.add('hidden');
+        }
+        if (classModal) {
+            classModal.classList.remove('hidden');
+        }
+        
+        console.log('🔗 Magic Link: Mostrando selección de clase. Selecciona tu clase para unirte automáticamente a la sala', magicRoom.toUpperCase());
+    }
+})();
