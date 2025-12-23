@@ -1130,7 +1130,7 @@ function isAdjacent(cell1, cell2) {
 let isAutoMoving = false;
 let autoMoveCancelToken = 0;
 let autoMoveSafetyTimeout = null;
-const AUTO_MOVE_INTERVAL = 300; // ms between each move step (strategic pace)
+const AUTO_MOVE_INTERVAL = 500; // ms between each move step (slow, deliberate pace)
 const AUTO_MOVE_SAFETY_TIMEOUT = 2000; // 2 seconds safety timeout to release controls
 
 function findPath(from, to, grid) {
@@ -1169,15 +1169,10 @@ function findPath(from, to, grid) {
             
             const cell = grid[ny][nx];
             
-            // Check if cell is passable (not mountain)
+            // AGGRESSIVE PATHFINDING (Attack Move):
+            // Only mountains are impassable - enemy cells are traversable
+            // The unit will attack enemies in its path (server handles combat)
             if (cell.terrain === 'mountain') continue;
-            
-            // For intermediate cells: only allow owned cells or empty cells
-            // For destination: allow any non-mountain cell (server will validate)
-            const isDestination = (nx === to.x && ny === to.y);
-            const isPassable = !cell.owner || cell.owner === playerColor;
-            
-            if (!isDestination && !isPassable) continue;
             
             const newPath = [...current.path, { x: nx, y: ny }];
             
