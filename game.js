@@ -448,8 +448,19 @@ function connectToServer(selectedClass) {
     });
 
     socket.on('error', (data) => {
-        console.error('Server error:', data.message);
-        alert(data.message);
+        const errorMsg = data.message || '';
+        
+        // Filter out "Already in a room" errors that occur during reconnection
+        // These are expected when the server already restored the session
+        if (errorMsg.includes('Already in a room') || 
+            errorMsg.includes('Already joined') || 
+            errorMsg.includes('Already reconnected')) {
+            console.log('🔄 Autojoin notice (ignorado):', errorMsg);
+            return; // Don't show alert for these expected errors
+        }
+        
+        console.error('Server error:', errorMsg);
+        alert(errorMsg);
         // Return to login if not in a room
         if (!currentRoomId) {
             loginOverlay.classList.remove('hidden');
