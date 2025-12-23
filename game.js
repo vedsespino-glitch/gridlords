@@ -232,31 +232,43 @@ function getOrCreateSessionToken() {
 const sessionToken = getOrCreateSessionToken();
 
 // Audio Manager for game sound effects
-// MP3-based Audio Manager
+// MP3-based Audio Manager - Uses local assets to avoid external CDN issues
 const AudioManager = {
     sounds: {},
+    failedSounds: {}, // Track sounds that failed to load
     muted: false,
     volume: 0.8,
     
-    // Sound URLs from free sources (Pixabay CDN)
-    // Note: alarm and radar use attack sound for reliable, strong audio
+    // Local sound paths (place audio files in ./assets/sounds/)
+    // If files don't exist, audio will fail silently without blocking gameplay
     soundUrls: {
-        move: 'https://cdn.pixabay.com/audio/2022/03/15/audio_115b9b87e4.mp3',      // Soft step/move sound
-        attack: 'https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a73467.mp3',    // Hit/sword sound
-        cannon: 'https://cdn.pixabay.com/audio/2022/03/15/audio_8cb749bf56.mp3',    // Explosion sound
-        split: 'https://cdn.pixabay.com/audio/2021/08/04/audio_0625c1539c.mp3',     // Whoosh/cut sound
-        win: 'https://cdn.pixabay.com/audio/2021/08/04/audio_12b0c7443c.mp3',       // Victory fanfare
-        lose: 'https://cdn.pixabay.com/audio/2022/03/15/audio_942694a069.mp3',      // Game over sound
-        alarm: 'https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a73467.mp3',     // Under attack (uses attack sound)
-        radar: 'https://cdn.pixabay.com/audio/2021/08/04/audio_12b0c7443c.mp3'      // Enemy spotted (uses victory fanfare)
+        move: './assets/sounds/move.mp3',
+        attack: './assets/sounds/attack.mp3',
+        cannon: './assets/sounds/cannon.mp3',
+        split: './assets/sounds/split.mp3',
+        win: './assets/sounds/win.mp3',
+        lose: './assets/sounds/lose.mp3',
+        alarm: './assets/sounds/alarm.mp3',
+        radar: './assets/sounds/radar.mp3'
     },
     
     init: function() {
-        // Preload all sounds
+        // Preload all sounds with error handling
         for (const [name, url] of Object.entries(this.soundUrls)) {
-            this.sounds[name] = new Audio(url);
-            this.sounds[name].volume = this.volume;
-            this.sounds[name].preload = 'auto';
+            try {
+                this.sounds[name] = new Audio(url);
+                this.sounds[name].volume = this.volume;
+                this.sounds[name].preload = 'auto';
+                
+                // Mark sound as failed if it errors during load
+                this.sounds[name].addEventListener('error', () => {
+                    this.failedSounds[name] = true;
+                    console.warn('Audio file not found or failed to load:', name);
+                });
+            } catch (error) {
+                this.failedSounds[name] = true;
+                console.warn('Failed to initialize audio:', name, error);
+            }
         }
         console.log('AudioManager initialized with', Object.keys(this.sounds).length, 'sounds');
     },
@@ -264,15 +276,24 @@ const AudioManager = {
     play: function(soundName) {
         if (this.muted) return;
         
+        // Skip if sound failed to load
+        if (this.failedSounds[soundName]) return;
+        
         const sound = this.sounds[soundName];
         if (sound) {
-            // Clone the audio to allow overlapping sounds
-            const clone = sound.cloneNode();
-            clone.volume = this.volume;
-            clone.play().catch(err => {
-                // Ignore autoplay errors (user hasn't interacted yet)
-                console.log('Audio play blocked:', err.message);
-            });
+            try {
+                // Clone the audio to allow overlapping sounds
+                const clone = sound.cloneNode();
+                clone.volume = this.volume;
+                clone.play().catch(err => {
+                    // Ignore autoplay errors (user hasn't interacted yet)
+                    console.log('Audio play blocked:', err.message);
+                });
+            } catch (error) {
+                // Mark as failed and ignore future attempts
+                this.failedSounds[soundName] = true;
+                console.warn('Audio error ignorado:', error);
+            }
         }
     },
     
@@ -284,7 +305,9 @@ const AudioManager = {
     setVolume: function(vol) {
         this.volume = Math.max(0, Math.min(1, vol));
         for (const sound of Object.values(this.sounds)) {
-            sound.volume = this.volume;
+            if (sound && sound.volume !== undefined) {
+                sound.volume = this.volume;
+            }
         }
     }
 };
@@ -304,8 +327,12 @@ function triggerUnderAttackAlert() {
     }
     lastUnderAttackAlert = now;
     
-    // Play alarm sound
-    AudioManager.play('alarm');
+    // Play alarm sound (non-blocking, wrapped in try/catch)
+    try {
+        AudioManager.play('alarm');
+    } catch (error) {
+        console.warn('Audio error ignorado:', error);
+    }
     
     // Add visual effect
     const gameContainer = document.getElementById('game-container');
@@ -331,8 +358,12 @@ function triggerEnemySpottedAlert() {
     }
     lastEnemySpottedAlert = now;
     
-    // Play radar ping sound
-    AudioManager.play('radar');
+    // Play radar ping sound (non-blocking, wrapped in try/catch)
+    try {
+        AudioManager.play('radar');
+    } catch (error) {
+        console.warn('Audio error ignorado:', error);
+    }
     
     // Add visual effect (orange flash)
     const gameContainer = document.getElementById('game-container');
@@ -627,7 +658,11 @@ function connectToServer(selectedClass) {
                     
                     // If cell changed owner and new owner is the player, play attack sound
                     if (prevCell && newCell && prevCell.owner !== newCell.owner && newCell.owner === playerColor) {
-                        AudioManager.play('attack');
+                        try {
+                            AudioManager.play('attack');
+                        } catch (error) {
+                            console.warn('Audio error ignorado:', error);
+                        }
                     }
                     
                     // If player lost a cell (was theirs, now belongs to enemy), trigger under attack alert
@@ -668,8 +703,12 @@ function connectToServer(selectedClass) {
             modeToggleBtn.classList.remove('game-active');
         }
         
-        // Play win or lose sound
-        AudioManager.play(isWinner ? 'win' : 'lose');
+        // Play win or lose sound (non-blocking, wrapped in try/catch)
+        try {
+            AudioManager.play(isWinner ? 'win' : 'lose');
+        } catch (error) {
+            console.warn('Audio error ignorado:', error);
+        }
         
         gameOverOverlay.classList.remove('hidden', 'victory', 'defeat');
         gameOverOverlay.classList.add(isWinner ? 'victory' : 'defeat');
@@ -778,8 +817,12 @@ function connectToServer(selectedClass) {
     });
 
     socket.on('artilleryFire', (data) => {
-        // Play cannon sound when artillery fires
-        AudioManager.play('cannon');
+        // Play cannon sound when artillery fires (non-blocking, wrapped in try/catch)
+        try {
+            AudioManager.play('cannon');
+        } catch (error) {
+            console.warn('Audio error ignorado:', error);
+        }
         
         const ownerLabel = data.artilleryOwner === 'neutral' ? 'NEUTRAL' : data.artilleryOwner.toUpperCase();
         console.log('%c💣 ARTILLERY FIRE! %c' + ownerLabel + ' artillery at (' + data.from.x + ',' + data.from.y + ') hit ' + data.targetOwner.toUpperCase() + ' at (' + data.to.nx + ',' + data.to.ny + ') for ' + data.damage + ' damage!', 
@@ -1090,13 +1133,7 @@ function handleCanvasInput(event) {
             // Use mobileSplitMode if active, otherwise use isSplitMove (from double-click)
             const useSplitMove = mobileSplitMode || isSplitMove;
             
-            // Play appropriate sound
-            if (useSplitMove) {
-                AudioManager.play('split');
-            } else {
-                AudioManager.play('move');
-            }
-            
+            // CRITICAL: Send move to server FIRST, before any audio
             socket.emit('move', {
                 from: selectedCell,
                 to: clickedCell,
@@ -1104,6 +1141,17 @@ function handleCanvasInput(event) {
             });
             selectedCell = null;
             isSplitMove = false;
+            
+            // Play appropriate sound (non-blocking, wrapped in try/catch)
+            try {
+                if (useSplitMove) {
+                    AudioManager.play('split');
+                } else {
+                    AudioManager.play('move');
+                }
+            } catch (error) {
+                console.warn('Audio error ignorado:', error);
+            }
         } else if (cell.owner === playerColor && cell.troops > 1) {
             // Select a different owned cell
             selectedCell = clickedCell;
@@ -1153,8 +1201,12 @@ canvas.addEventListener('dblclick', (event) => {
     const cell = gameState.grid[clickedCell.y][clickedCell.x];
 
     if (cell.owner === playerColor && cell.troops >= 2) {
-        // Play split sound when activating split move
-        AudioManager.play('split');
+        // Play split sound when activating split move (non-blocking, wrapped in try/catch)
+        try {
+            AudioManager.play('split');
+        } catch (error) {
+            console.warn('Audio error ignorado:', error);
+        }
         selectedCell = clickedCell;
         isSplitMove = true;
         const splitTroops = Math.floor(cell.troops / 2);
@@ -1309,9 +1361,13 @@ if (modeToggleBtn && modeText) {
             statusEl.style.background = '#3498db';
         }
         
-        // Play split sound as feedback when toggling to split mode
+        // Play split sound as feedback when toggling to split mode (non-blocking, wrapped in try/catch)
         if (mobileSplitMode) {
-            AudioManager.play('split');
+            try {
+                AudioManager.play('split');
+            } catch (error) {
+                console.warn('Audio error ignorado:', error);
+            }
         }
     });
 }
