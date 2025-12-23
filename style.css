@@ -944,9 +944,9 @@ body {
         font-size: 0.9rem;
     }
     
-    /* Canvas/Grid adjustments - allow native size for scrolling */
+    /* Canvas/Grid adjustments - prevent zoom/scroll on touch */
     #gameCanvas {
-        touch-action: manipulation;
+        touch-action: none;
     }
     
     /* Instructions hidden on mobile to save space */
@@ -1089,9 +1089,9 @@ body {
     }
 }
 
-/* Touch action for better mobile interaction */
+/* Touch action for better mobile interaction - prevent zoom/scroll */
 #gameCanvas {
-    touch-action: manipulation;
+    touch-action: none;
 }
 
 body {
