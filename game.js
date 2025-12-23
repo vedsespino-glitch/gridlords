@@ -1217,6 +1217,7 @@ function executeAutoMove(path, useSplitMove) {
     isAutoMoving = true;
     let currentIndex = 0;
     let currentFrom = selectedCell ? { ...selectedCell } : null;
+    let autoMoveTimeoutId = null;
     
     if (!currentFrom) {
         console.warn('❌ Auto-move: No origin cell');
@@ -1224,19 +1225,14 @@ function executeAutoMove(path, useSplitMove) {
         return;
     }
     
-    // Detect if path ends at an enemy cell (Attack Move stopped by enemy)
-    const lastCell = path[path.length - 1];
-    const lastCellData = gameState.grid[lastCell.y]?.[lastCell.x];
-    const stoppedByEnemy = lastCellData && lastCellData.owner && lastCellData.owner !== playerColor;
-    
-    console.log('🚗 Starting auto-move:', path.length, 'steps, splitMove:', useSplitMove, 'stoppedByEnemy:', stoppedByEnemy);
+    console.log('🚗 Starting auto-move:', path.length, 'steps, splitMove:', useSplitMove);
     statusEl.textContent = `Auto-moviendo... (${path.length} pasos)`;
     statusEl.style.background = '#9b59b6';
     
     function executeNextStep() {
-        // Check if cancelled by user
+        // STEP 1: Validate state - if cancelled by user, BREAK immediately
         if (token !== autoMoveCancelToken) {
-            console.log('🛑 Auto-move cancelled');
+            console.log('🛑 Auto-move cancelled by user');
             isAutoMoving = false;
             return;
         }
@@ -1250,75 +1246,87 @@ function executeAutoMove(path, useSplitMove) {
             return;
         }
         
-        // Check if we've completed all steps (before emitting)
+        // Check if we've completed all steps
         if (currentIndex >= path.length) {
-            // This shouldn't happen with the new logic, but keep as safety
-            console.log('✅ Auto-move complete (safety check)');
+            console.log('✅ Auto-move complete');
             isAutoMoving = false;
             selectedCell = null;
+            statusEl.textContent = 'Listo';
+            statusEl.style.background = '#3498db';
             render();
             return;
         }
         
         const nextCell = path[currentIndex];
         
-        // Validate the move is still possible (basic check)
+        // STEP 2: Evaluate the target cell BEFORE emitting
         const fromCell = gameState.grid[currentFrom.y]?.[currentFrom.x];
         const toCell = gameState.grid[nextCell.y]?.[nextCell.x];
         
+        // CASE B: Mountain/Invalid - BREAK immediately, no emit, no wait
         if (!fromCell || !toCell || toCell.terrain === TERRAIN.MOUNTAIN) {
-            console.log('🛑 Auto-move stopped: invalid cell');
+            console.log('🛑 Auto-move BREAK: mountain/invalid cell');
             isAutoMoving = false;
             statusEl.textContent = 'Ruta bloqueada';
             statusEl.style.background = '#e74c3c';
+            render();
             return;
         }
         
-        // Emit the move
-        console.log('🚀 Auto-move step', currentIndex + 1, '/', path.length, ':', currentFrom, '->', nextCell);
+        // Determine if this is an interaction (enemy/structure) - will be final action
+        const isEnemyCell = toCell.owner && toCell.owner !== playerColor;
+        const isStructure = toCell.terrain === TERRAIN.OUTPOST || toCell.terrain === TERRAIN.ARTILLERY;
+        const isInteraction = isEnemyCell || (isStructure && toCell.owner !== playerColor);
+        
+        // STEP 3: Emit the move
+        console.log('🚀 Auto-move step', currentIndex + 1, '/', path.length, ':', currentFrom, '->', nextCell, 
+            isInteraction ? '(INTERACTION - final action)' : '(empty/friendly)');
         socket.emit('move', {
             from: currentFrom,
             to: nextCell,
             splitMove: useSplitMove
         });
         
-        // Play move sound (non-blocking)
+        // Play appropriate sound (non-blocking)
         try {
-            AudioManager.play('move');
+            if (isInteraction) {
+                AudioManager.play('attack');
+            } else {
+                AudioManager.play('move');
+            }
         } catch (error) {
             console.warn('Audio error ignorado:', error);
+        }
+        
+        // CASE C: Interaction (enemy/structure) - BREAK immediately after action
+        if (isInteraction) {
+            console.log('🛑 Auto-move BREAK: interaction complete (attack/capture)');
+            isAutoMoving = false;
+            selectedCell = null;
+            statusEl.textContent = 'Listo';
+            statusEl.style.background = '#3498db';
+            render();
+            return;
         }
         
         // Update current position for next step
         currentFrom = { x: nextCell.x, y: nextCell.y };
         currentIndex++;
         
-        // INSTANT UNLOCK: Check if this was the last step - end immediately, no timeout
+        // Check if this was the last step
         if (currentIndex >= path.length) {
             console.log('✅ Auto-move complete');
             isAutoMoving = false;
             selectedCell = null;
-            
-            // UX: If stopped by enemy (Attack Move), stay silent - no confusing message
-            // Only show "completed" message for normal full-path completion
-            if (!stoppedByEnemy) {
-                statusEl.textContent = 'Auto-movimiento completado';
-                statusEl.style.background = '#27ae60';
-            } else {
-                // Silent stop at enemy - just clear the status
-                statusEl.textContent = 'Listo';
-                statusEl.style.background = '#3498db';
-            }
-            
+            statusEl.textContent = 'Auto-movimiento completado';
+            statusEl.style.background = '#27ae60';
             render();
             return;
         }
         
-        // Update status for ongoing movement
+        // CASE A: Empty/friendly cell - wait 700ms then continue
         statusEl.textContent = `Auto-moviendo... (${currentIndex}/${path.length})`;
-        
-        // Schedule next step
-        setTimeout(executeNextStep, AUTO_MOVE_INTERVAL);
+        autoMoveTimeoutId = setTimeout(executeNextStep, AUTO_MOVE_INTERVAL);
     }
     
     // Clear selection and start
@@ -1478,6 +1486,16 @@ canvas.addEventListener('pointerdown', (event) => {
     event.preventDefault();
     handleCanvasInput(event);
 });
+
+// MOBILE STABILITY: Prevent browser zoom/scroll gestures on canvas
+// Must use { passive: false } to allow preventDefault() on touch events
+canvas.addEventListener('touchstart', (event) => {
+    event.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (event) => {
+    event.preventDefault();
+}, { passive: false });
 
 // Fallback click handler for older browsers
 canvas.addEventListener('click', (event) => {
