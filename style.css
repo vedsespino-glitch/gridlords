@@ -1557,3 +1557,67 @@ body {
 .room-code-input::placeholder {
     color: #666 !important;
 }
+
+/* Copy Link Button - Lobby */
+.copy-link-btn {
+    background: linear-gradient(135deg, #4a90d9 0%, #357abd 100%);
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    cursor: pointer;
+    margin: 10px 0;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.copy-link-btn:hover {
+    background: linear-gradient(135deg, #5a9fe9 0%, #4589cd 100%);
+    transform: scale(1.05);
+}
+
+.copy-link-btn:active {
+    transform: scale(0.98);
+}
+
+/* Copy Link Button - HUD (smaller) */
+.copy-link-btn-hud {
+    background: transparent;
+    border: none;
+    color: #4a90d9;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 2px 6px;
+    margin-left: 5px;
+    transition: all 0.2s ease;
+    vertical-align: middle;
+}
+
+.copy-link-btn-hud:hover {
+    color: #5a9fe9;
+    transform: scale(1.2);
+}
+
+/* Toast Notification */
+.toast-notification {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: rgba(0, 0, 0, 0.85);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    z-index: 10000;
+    opacity: 0;
+    transition: all 0.3s ease;
+    pointer-events: none;
+    border: 1px solid #4a90d9;
+}
+
+.toast-notification.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
