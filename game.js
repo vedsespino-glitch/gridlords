@@ -1129,7 +1129,7 @@ function isAdjacent(cell1, cell2) {
 // ============================================
 let isAutoMoving = false;
 let autoMoveCancelToken = 0;
-const AUTO_MOVE_INTERVAL = 150; // ms between each move step
+const AUTO_MOVE_INTERVAL = 550; // ms between each move step (slow pace for followable gameplay)
 
 function findPath(from, to, grid) {
     if (!grid || !from || !to) return null;
@@ -1170,19 +1170,17 @@ function findPath(from, to, grid) {
             // Check if cell is passable (not mountain)
             if (cell.terrain === 'mountain') continue;
             
-            // For intermediate cells: only allow owned cells or empty cells
-            // For destination: allow any non-mountain cell (server will validate)
-            const isDestination = (nx === to.x && ny === to.y);
-            const isPassable = !cell.owner || cell.owner === playerColor;
-            
-            if (!isDestination && !isPassable) continue;
-            
+            // ATTACK MOVE: Allow ALL non-mountain cells (including enemy cells)
+            // This enables aggressive pathfinding that goes through enemies
             const newPath = [...current.path, { x: nx, y: ny }];
             
             // Found destination
-            if (isDestination) {
-                console.log('🗺️ Path found:', newPath.length, 'steps');
-                return newPath;
+            if (nx === to.x && ny === to.y) {
+                // ATTACK MOVE: Truncate path at first enemy cell
+                // This ensures we attack the blocking enemy instead of committing to a chain of attacks
+                const truncatedPath = truncatePathAtFirstEnemy(newPath, grid);
+                console.log('🗺️ Path found:', newPath.length, 'steps, truncated to:', truncatedPath.length, 'steps (Attack Move)');
+                return truncatedPath;
             }
             
             visited.add(key);
@@ -1192,6 +1190,24 @@ function findPath(from, to, grid) {
     
     console.log('🚫 No path found from', from, 'to', to);
     return null;
+}
+
+// ATTACK MOVE: Truncate path at first enemy cell
+// This ensures aggressive behavior (attack instead of route around) without committing to multi-enemy traversal
+function truncatePathAtFirstEnemy(path, grid) {
+    if (!path || path.length === 0) return path;
+    
+    for (let i = 0; i < path.length; i++) {
+        const cell = grid[path[i].y]?.[path[i].x];
+        if (cell && cell.owner && cell.owner !== playerColor) {
+            // Found enemy cell - truncate path here (include this cell as the attack target)
+            console.log('⚔️ Attack Move: Truncating at enemy cell', path[i], 'owner:', cell.owner);
+            return path.slice(0, i + 1);
+        }
+    }
+    
+    // No enemy cells in path - return full path
+    return path;
 }
 
 function executeAutoMove(path, useSplitMove) {
