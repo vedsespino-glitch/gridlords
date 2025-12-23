@@ -1129,7 +1129,7 @@ function isAdjacent(cell1, cell2) {
 // ============================================
 let isAutoMoving = false;
 let autoMoveCancelToken = 0;
-const AUTO_MOVE_INTERVAL = 550; // ms between each move step (slow pace for followable gameplay)
+const AUTO_MOVE_INTERVAL = 700; // ms between each move step (deliberate, heavy pace)
 
 function findPath(from, to, grid) {
     if (!grid || !from || !to) return null;
@@ -1224,12 +1224,17 @@ function executeAutoMove(path, useSplitMove) {
         return;
     }
     
-    console.log('🚗 Starting auto-move:', path.length, 'steps, splitMove:', useSplitMove);
+    // Detect if path ends at an enemy cell (Attack Move stopped by enemy)
+    const lastCell = path[path.length - 1];
+    const lastCellData = gameState.grid[lastCell.y]?.[lastCell.x];
+    const stoppedByEnemy = lastCellData && lastCellData.owner && lastCellData.owner !== playerColor;
+    
+    console.log('🚗 Starting auto-move:', path.length, 'steps, splitMove:', useSplitMove, 'stoppedByEnemy:', stoppedByEnemy);
     statusEl.textContent = `Auto-moviendo... (${path.length} pasos)`;
     statusEl.style.background = '#9b59b6';
     
     function executeNextStep() {
-        // Check if cancelled
+        // Check if cancelled by user
         if (token !== autoMoveCancelToken) {
             console.log('🛑 Auto-move cancelled');
             isAutoMoving = false;
@@ -1245,13 +1250,12 @@ function executeAutoMove(path, useSplitMove) {
             return;
         }
         
-        // Check if we've completed all steps
+        // Check if we've completed all steps (before emitting)
         if (currentIndex >= path.length) {
-            console.log('✅ Auto-move complete');
+            // This shouldn't happen with the new logic, but keep as safety
+            console.log('✅ Auto-move complete (safety check)');
             isAutoMoving = false;
             selectedCell = null;
-            statusEl.textContent = 'Auto-movimiento completado';
-            statusEl.style.background = '#27ae60';
             render();
             return;
         }
@@ -1285,12 +1289,33 @@ function executeAutoMove(path, useSplitMove) {
             console.warn('Audio error ignorado:', error);
         }
         
-        // Update status
-        statusEl.textContent = `Auto-moviendo... (${currentIndex + 1}/${path.length})`;
-        
         // Update current position for next step
         currentFrom = { x: nextCell.x, y: nextCell.y };
         currentIndex++;
+        
+        // INSTANT UNLOCK: Check if this was the last step - end immediately, no timeout
+        if (currentIndex >= path.length) {
+            console.log('✅ Auto-move complete');
+            isAutoMoving = false;
+            selectedCell = null;
+            
+            // UX: If stopped by enemy (Attack Move), stay silent - no confusing message
+            // Only show "completed" message for normal full-path completion
+            if (!stoppedByEnemy) {
+                statusEl.textContent = 'Auto-movimiento completado';
+                statusEl.style.background = '#27ae60';
+            } else {
+                // Silent stop at enemy - just clear the status
+                statusEl.textContent = 'Listo';
+                statusEl.style.background = '#3498db';
+            }
+            
+            render();
+            return;
+        }
+        
+        // Update status for ongoing movement
+        statusEl.textContent = `Auto-moviendo... (${currentIndex}/${path.length})`;
         
         // Schedule next step
         setTimeout(executeNextStep, AUTO_MOVE_INTERVAL);
