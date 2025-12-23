@@ -587,12 +587,19 @@ function connectToServer(selectedClass) {
     });
 
     socket.on('reconnected', (data) => {
-        console.log('Successfully reconnected to game!', data);
+        console.log('🔄 Successfully reconnected to game!', data);
+        console.log('🔄 Reconnected as ID:', data.color, '| Socket:', socket.id, '| gameStarted:', data.gameStarted);
+        
+        // CRITICAL: Set player identity and game state
         playerColor = data.color;
         playerClass = data.playerClass;
         currentRoomId = data.roomId;
         gameStarted = data.gameStarted;
         isHost = data.isHost;
+        
+        // Reset selection state to avoid stale references
+        selectedCell = null;
+        isSplitMove = false;
         
         const classLabel = playerClass === 'tank' ? 'Tank' : (playerClass === 'scout' ? 'Scout' : 'Rusher');
         const classIcon = playerClass === 'tank' ? '🛡️' : (playerClass === 'scout' ? '🐴' : '⚡');
@@ -613,11 +620,31 @@ function connectToServer(selectedClass) {
             if (modeToggleBtn) {
                 modeToggleBtn.classList.add('game-active');
             }
+            
+            // Note: Server sends gameState immediately after reconnected event
+            // No need to request it explicitly
+            console.log('🔄 Game is active, waiting for gameState from server...');
         }
         
         if (chatContainer) {
             chatContainer.classList.remove('hidden');
         }
+        
+        // Force re-render to update canvas with any existing state
+        if (gameState) {
+            console.log('🔄 Re-rendering with existing gameState');
+            render();
+        } else {
+            console.log('🔄 Waiting for gameState from server...');
+        }
+        
+        // Verify canvas element is still valid
+        const currentCanvas = document.getElementById('gameCanvas');
+        if (currentCanvas !== canvas) {
+            console.warn('⚠️ Canvas element reference changed! This may cause input issues.');
+        }
+        
+        console.log('🔄 Reconnection complete. Controls should be active. playerColor:', playerColor, 'gameStarted:', gameStarted);
     });
 
     socket.on('playerReconnected', (data) => {
@@ -648,6 +675,9 @@ function connectToServer(selectedClass) {
     });
 
     socket.on('gameState', (state) => {
+        // Log gameState reception for debugging reconnection issues
+        console.log('📊 gameState received - grid:', !!state?.grid, 'playerColor:', playerColor, 'gameStarted:', gameStarted);
+        
         // Detect ownership changes (attacks) by comparing with previous state
         let playerLostCell = false;
         if (previousGameState && previousGameState.grid && state.grid) {
@@ -1115,7 +1145,18 @@ function updateMatchInfo() {
 
 // Unified handler for both mouse and touch input
 function handleCanvasInput(event) {
-    if (!gameState || !gameStarted || gameState.winner) return;
+    // Debug logging to verify click detection
+    const clickPos = getCellFromMouse(event);
+    console.log('🖱️ Canvas clicked/touched at:', clickPos ? `(${clickPos.x}, ${clickPos.y})` : 'outside grid', 
+        '| gameState:', !!gameState, 
+        '| gameStarted:', gameStarted, 
+        '| playerColor:', playerColor,
+        '| socket:', socket ? socket.id : 'null');
+    
+    if (!gameState || !gameStarted || gameState.winner) {
+        console.log('🚫 Input blocked - gameState:', !!gameState, 'gameStarted:', gameStarted, 'winner:', gameState?.winner);
+        return;
+    }
 
     const clickedCell = getCellFromMouse(event);
     if (!clickedCell) return;
