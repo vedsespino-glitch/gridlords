@@ -1124,6 +1124,177 @@ function isAdjacent(cell1, cell2) {
     return dx + dy === 1;
 }
 
+// ============================================
+// PATHFINDING: BFS algorithm for auto-move
+// ============================================
+let isAutoMoving = false;
+let autoMoveCancelToken = 0;
+const AUTO_MOVE_INTERVAL = 150; // ms between each move step
+
+function findPath(from, to, grid) {
+    if (!grid || !from || !to) return null;
+    if (from.x === to.x && from.y === to.y) return [];
+    
+    const gridHeight = grid.length;
+    const gridWidth = grid[0].length;
+    
+    // BFS queue: each element is {x, y, path: array of cells}
+    const queue = [{ x: from.x, y: from.y, path: [] }];
+    const visited = new Set();
+    visited.add(`${from.x},${from.y}`);
+    
+    // 4-directional movement (up, down, left, right)
+    const directions = [
+        { dx: 0, dy: -1 }, // up
+        { dx: 0, dy: 1 },  // down
+        { dx: -1, dy: 0 }, // left
+        { dx: 1, dy: 0 }   // right
+    ];
+    
+    while (queue.length > 0) {
+        const current = queue.shift();
+        
+        for (const dir of directions) {
+            const nx = current.x + dir.dx;
+            const ny = current.y + dir.dy;
+            const key = `${nx},${ny}`;
+            
+            // Check bounds
+            if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) continue;
+            
+            // Check if already visited
+            if (visited.has(key)) continue;
+            
+            const cell = grid[ny][nx];
+            
+            // Check if cell is passable (not mountain)
+            if (cell.terrain === 'mountain') continue;
+            
+            // For intermediate cells: only allow owned cells or empty cells
+            // For destination: allow any non-mountain cell (server will validate)
+            const isDestination = (nx === to.x && ny === to.y);
+            const isPassable = !cell.owner || cell.owner === playerColor;
+            
+            if (!isDestination && !isPassable) continue;
+            
+            const newPath = [...current.path, { x: nx, y: ny }];
+            
+            // Found destination
+            if (isDestination) {
+                console.log('🗺️ Path found:', newPath.length, 'steps');
+                return newPath;
+            }
+            
+            visited.add(key);
+            queue.push({ x: nx, y: ny, path: newPath });
+        }
+    }
+    
+    console.log('🚫 No path found from', from, 'to', to);
+    return null;
+}
+
+function executeAutoMove(path, useSplitMove) {
+    if (!path || path.length === 0) return;
+    
+    const token = ++autoMoveCancelToken;
+    isAutoMoving = true;
+    let currentIndex = 0;
+    let currentFrom = selectedCell ? { ...selectedCell } : null;
+    
+    if (!currentFrom) {
+        console.warn('❌ Auto-move: No origin cell');
+        isAutoMoving = false;
+        return;
+    }
+    
+    console.log('🚗 Starting auto-move:', path.length, 'steps, splitMove:', useSplitMove);
+    statusEl.textContent = `Auto-moviendo... (${path.length} pasos)`;
+    statusEl.style.background = '#9b59b6';
+    
+    function executeNextStep() {
+        // Check if cancelled
+        if (token !== autoMoveCancelToken) {
+            console.log('🛑 Auto-move cancelled');
+            isAutoMoving = false;
+            return;
+        }
+        
+        // Check if game state is still valid
+        if (!gameState || !socket || !socket.connected || gameState.winner) {
+            console.log('🛑 Auto-move stopped: game state invalid');
+            isAutoMoving = false;
+            statusEl.textContent = 'Auto-movimiento detenido';
+            statusEl.style.background = '#e74c3c';
+            return;
+        }
+        
+        // Check if we've completed all steps
+        if (currentIndex >= path.length) {
+            console.log('✅ Auto-move complete');
+            isAutoMoving = false;
+            selectedCell = null;
+            statusEl.textContent = 'Auto-movimiento completado';
+            statusEl.style.background = '#27ae60';
+            render();
+            return;
+        }
+        
+        const nextCell = path[currentIndex];
+        
+        // Validate the move is still possible (basic check)
+        const fromCell = gameState.grid[currentFrom.y]?.[currentFrom.x];
+        const toCell = gameState.grid[nextCell.y]?.[nextCell.x];
+        
+        if (!fromCell || !toCell || toCell.terrain === 'mountain') {
+            console.log('🛑 Auto-move stopped: invalid cell');
+            isAutoMoving = false;
+            statusEl.textContent = 'Ruta bloqueada';
+            statusEl.style.background = '#e74c3c';
+            return;
+        }
+        
+        // Emit the move
+        console.log('🚀 Auto-move step', currentIndex + 1, '/', path.length, ':', currentFrom, '->', nextCell);
+        socket.emit('move', {
+            from: currentFrom,
+            to: nextCell,
+            splitMove: useSplitMove
+        });
+        
+        // Play move sound (non-blocking)
+        try {
+            AudioManager.play('move');
+        } catch (error) {
+            console.warn('Audio error ignorado:', error);
+        }
+        
+        // Update status
+        statusEl.textContent = `Auto-moviendo... (${currentIndex + 1}/${path.length})`;
+        
+        // Update current position for next step
+        currentFrom = { x: nextCell.x, y: nextCell.y };
+        currentIndex++;
+        
+        // Schedule next step
+        setTimeout(executeNextStep, AUTO_MOVE_INTERVAL);
+    }
+    
+    // Clear selection and start
+    selectedCell = null;
+    executeNextStep();
+}
+
+function cancelAutoMove() {
+    if (isAutoMoving) {
+        autoMoveCancelToken++;
+        isAutoMoving = false;
+        console.log('🛑 Auto-move cancelled by user');
+        statusEl.textContent = 'Auto-movimiento cancelado';
+        statusEl.style.background = '#e67e22';
+    }
+}
+
 function getClassIcon(classType) {
     if (classType === 'tank') return '🛡️';
     if (classType === 'scout') return '🐴';
@@ -1162,7 +1333,15 @@ function handleCanvasInput(event) {
         '| gameState:', !!gameState, 
         '| gameStarted:', gameStarted, 
         '| playerColor:', playerColor,
-        '| socket:', socket ? socket.id : 'null');
+        '| socket:', socket ? socket.id : 'null',
+        '| isAutoMoving:', isAutoMoving);
+    
+    // Cancel auto-move if user clicks during auto-move
+    if (isAutoMoving) {
+        cancelAutoMove();
+        render();
+        return;
+    }
     
     if (!gameState || !gameStarted || gameState.winner) {
         console.log('🚫 Input blocked - gameState:', !!gameState, 'gameStarted:', gameStarted, 'winner:', gameState?.winner);
@@ -1206,15 +1385,24 @@ function handleCanvasInput(event) {
                 console.warn('Audio error ignorado:', error);
             }
         } else if (cell.terrain !== 'mountain') {
-            // CLIENT-SIDE BYPASS: Allow selecting ANY non-mountain cell
-            // Server will validate if the move is legal
-            selectedCell = clickedCell;
-            isSplitMove = false;
-            const modeLabel = mobileSplitMode ? 'DIVIDIR' : 'MOVER';
-            const ownerInfo = cell.owner ? `(${cell.owner})` : '(vacía)';
-            statusEl.textContent = `Celda seleccionada ${ownerInfo} - Toca una celda vecina`;
-            statusEl.style.background = mobileSplitMode ? '#e67e22' : '#3498db';
-            console.log('✅ Re-selected cell:', clickedCell, 'owner:', cell.owner, 'troops:', cell.troops);
+            // NON-ADJACENT CELL: Try pathfinding for auto-move
+            const useSplitMove = mobileSplitMode || isSplitMove;
+            const path = findPath(selectedCell, clickedCell, gameState.grid);
+            
+            if (path && path.length > 0) {
+                // Path found - execute auto-move
+                console.log('🗺️ Pathfinding: Found route with', path.length, 'steps');
+                executeAutoMove(path, useSplitMove);
+            } else if (path && path.length === 0) {
+                // Same cell (shouldn't happen here)
+                console.log('🗺️ Pathfinding: Already at destination');
+            } else {
+                // No path found - show error and allow re-selection
+                console.log('🚫 No path available to destination');
+                statusEl.textContent = 'No hay ruta disponible - Selecciona otro destino';
+                statusEl.style.background = '#e74c3c';
+                // Keep selectedCell so user can try another destination
+            }
         } else {
             // Mountain - deselect
             selectedCell = null;
@@ -1229,7 +1417,7 @@ function handleCanvasInput(event) {
             isSplitMove = false;
             const modeLabel = mobileSplitMode ? 'DIVIDIR' : 'MOVER';
             const ownerInfo = cell.owner ? `(${cell.owner})` : '(vacía)';
-            statusEl.textContent = `Celda seleccionada ${ownerInfo} - Toca una celda vecina`;
+            statusEl.textContent = `Celda seleccionada ${ownerInfo} - Toca destino (vecino o lejano)`;
             statusEl.style.background = mobileSplitMode ? '#e67e22' : '#3498db';
             console.log('✅ Selected cell:', clickedCell, 'owner:', cell.owner, 'troops:', cell.troops, 'myColor:', playerColor);
         } else {
