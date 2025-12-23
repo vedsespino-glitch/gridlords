@@ -1129,7 +1129,9 @@ function isAdjacent(cell1, cell2) {
 // ============================================
 let isAutoMoving = false;
 let autoMoveCancelToken = 0;
-const AUTO_MOVE_INTERVAL = 150; // ms between each move step
+let autoMoveSafetyTimeout = null;
+const AUTO_MOVE_INTERVAL = 300; // ms between each move step (strategic pace)
+const AUTO_MOVE_SAFETY_TIMEOUT = 2000; // 2 seconds safety timeout to release controls
 
 function findPath(from, to, grid) {
     if (!grid || !from || !to) return null;
@@ -1208,22 +1210,53 @@ function executeAutoMove(path, useSplitMove) {
         return;
     }
     
+    // Clear any existing safety timeout
+    if (autoMoveSafetyTimeout) {
+        clearTimeout(autoMoveSafetyTimeout);
+        autoMoveSafetyTimeout = null;
+    }
+    
     console.log('🚗 Starting auto-move:', path.length, 'steps, splitMove:', useSplitMove);
     statusEl.textContent = `Auto-moviendo... (${path.length} pasos)`;
     statusEl.style.background = '#9b59b6';
+    
+    // Safety timeout function - releases controls if stuck
+    function resetSafetyTimeout() {
+        if (autoMoveSafetyTimeout) {
+            clearTimeout(autoMoveSafetyTimeout);
+        }
+        autoMoveSafetyTimeout = setTimeout(() => {
+            if (isAutoMoving && token === autoMoveCancelToken) {
+                console.warn('⏰ Auto-move safety timeout: releasing controls');
+                isAutoMoving = false;
+                autoMoveSafetyTimeout = null;
+                statusEl.textContent = 'Auto-movimiento timeout - controles liberados';
+                statusEl.style.background = '#e67e22';
+                render();
+            }
+        }, AUTO_MOVE_SAFETY_TIMEOUT);
+    }
+    
+    function cleanupAutoMove() {
+        isAutoMoving = false;
+        if (autoMoveSafetyTimeout) {
+            clearTimeout(autoMoveSafetyTimeout);
+            autoMoveSafetyTimeout = null;
+        }
+    }
     
     function executeNextStep() {
         // Check if cancelled
         if (token !== autoMoveCancelToken) {
             console.log('🛑 Auto-move cancelled');
-            isAutoMoving = false;
+            cleanupAutoMove();
             return;
         }
         
         // Check if game state is still valid
         if (!gameState || !socket || !socket.connected || gameState.winner) {
             console.log('🛑 Auto-move stopped: game state invalid');
-            isAutoMoving = false;
+            cleanupAutoMove();
             statusEl.textContent = 'Auto-movimiento detenido';
             statusEl.style.background = '#e74c3c';
             return;
@@ -1232,7 +1265,7 @@ function executeAutoMove(path, useSplitMove) {
         // Check if we've completed all steps
         if (currentIndex >= path.length) {
             console.log('✅ Auto-move complete');
-            isAutoMoving = false;
+            cleanupAutoMove();
             selectedCell = null;
             statusEl.textContent = 'Auto-movimiento completado';
             statusEl.style.background = '#27ae60';
@@ -1248,11 +1281,14 @@ function executeAutoMove(path, useSplitMove) {
         
         if (!fromCell || !toCell || toCell.terrain === 'mountain') {
             console.log('🛑 Auto-move stopped: invalid cell');
-            isAutoMoving = false;
+            cleanupAutoMove();
             statusEl.textContent = 'Ruta bloqueada';
             statusEl.style.background = '#e74c3c';
             return;
         }
+        
+        // Reset safety timeout on each successful step
+        resetSafetyTimeout();
         
         // Emit the move
         console.log('🚀 Auto-move step', currentIndex + 1, '/', path.length, ':', currentFrom, '->', nextCell);
@@ -1262,7 +1298,7 @@ function executeAutoMove(path, useSplitMove) {
             splitMove: useSplitMove
         });
         
-        // Play move sound (non-blocking)
+        // Play move sound (non-blocking) - uses local .mp3 files
         try {
             AudioManager.play('move');
         } catch (error) {
@@ -1280,8 +1316,9 @@ function executeAutoMove(path, useSplitMove) {
         setTimeout(executeNextStep, AUTO_MOVE_INTERVAL);
     }
     
-    // Clear selection and start
+    // Clear selection, start safety timeout, and begin
     selectedCell = null;
+    resetSafetyTimeout();
     executeNextStep();
 }
 
@@ -1289,6 +1326,11 @@ function cancelAutoMove() {
     if (isAutoMoving) {
         autoMoveCancelToken++;
         isAutoMoving = false;
+        // Clear safety timeout on manual cancel
+        if (autoMoveSafetyTimeout) {
+            clearTimeout(autoMoveSafetyTimeout);
+            autoMoveSafetyTimeout = null;
+        }
         console.log('🛑 Auto-move cancelled by user');
         statusEl.textContent = 'Auto-movimiento cancelado';
         statusEl.style.background = '#e67e22';
